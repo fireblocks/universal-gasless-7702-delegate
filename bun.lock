@@ -4,7 +4,7 @@
     "": {
       "name": "@prb/foundry-template",
       "dependencies": {
-        "@openzeppelin/contracts": "^5.0.1",
+        "@openzeppelin/contracts": "^5.2.0",
       },
       "devDependencies": {
         "forge-std": "github:foundry-rs/forge-std#v1.9.6",
@@ -20,7 +20,7 @@
 
     "@babel/highlight": ["@babel/highlight@7.23.4", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.22.20", "chalk": "^2.4.2", "js-tokens": "^4.0.0" } }, "sha512-acGdbYSfp2WheJoJm/EBBBLh/ID8KDc64ISZ9DYtBmC8/Q204PZJLHyzeB5qMzJ5trcOkybd78M4x2KWsUq++A=="],
 
-    "@openzeppelin/contracts": ["@openzeppelin/contracts@5.0.1", "", {}, "sha512-yQJaT5HDp9hYOOp4jTYxMsR02gdFZFXhewX5HW9Jo4fsqSVqqyIO/xTHdWDaKX5a3pv1txmf076Lziz+sO7L1w=="],
+    "@openzeppelin/contracts": ["@openzeppelin/contracts@5.2.0", "", {}, "sha512-bxjNie5z89W1Ea0NZLZluFh8PrFNn9DH8DQlujEok2yjsOlraUPKID5p1Wk3qdNbf6XkQ1Os2RvfiHrrXLHWKA=="],
 
     "@pnpm/config.env-replace": ["@pnpm/config.env-replace@1.1.0", "", {}, "sha512-htyl8TWnKL7K/ESFa1oW2UB5lVDxuF5DpM7tBi6Hu2LNL3mWkIzNLG6N4zoCUP1lCKNxWy/3iu8mS8MvToGd6w=="],
 

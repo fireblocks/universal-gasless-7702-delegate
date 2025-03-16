@@ -1,93 +1,173 @@
-# Universal Gasless 7702 Contract
+# Universal Gasless - Smart Contracts
 
+A Foundry-based template for developing Solidity smart contracts, with sensible defaults.
 
+## Prerequisites
 
-## Getting started
+- [Bun](https://bun.sh/docs/installation): Foundry defaults to git submodules, but this template uses Node.js packages for managing dependencies
+- [Forge](https://github.com/foundry-rs/foundry/blob/master/forge): compile, test, fuzz, format, and deploy smart
+  contracts
+- [Lcov](https://github.com/linux-test-project/lcov) : On macOS, you can install it with Homebrew: `brew install lcov`.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## What's Inside
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- [Forge Std](https://github.com/foundry-rs/forge-std): collection of helpful contracts and utilities for testing
+- [Prettier](https://github.com/prettier/prettier): code formatter for non-Solidity files
+- [Solhint](https://github.com/protofire/solhint): linter for Solidity code
 
-## Add your files
+## Getting Started
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
+```sh
+$ bun install # install Solhint, Prettier, and other Node.js deps
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/fireblocks/web3/universal-gasless-7702-contract.git
-git branch -M main
-git push -uf origin main
-```
 
-## Integrate with your tools
+If this is your first time with Foundry, check out the
+[installation](https://github.com/foundry-rs/foundry#installation) instructions.
 
-- [ ] [Set up project integrations](https://gitlab.com/fireblocks/web3/universal-gasless-7702-contract/-/settings/integrations)
+### Features
 
-## Collaborate with your team
+If you're interested in exploring Foundry in more detail, you should look at the
+[Foundry Book](https://book.getfoundry.sh). In particular, you may be interested in reading the
+[Writing Tests](https://book.getfoundry.sh/forge/writing-tests.html) tutorial.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### VSCode Integration
 
-## Test and Deploy
+This template is IDE agnostic, but for the best user experience, you may want to use it in VSCode alongside Nomic
+Foundation's [Solidity extension](https://marketplace.visualstudio.com/items?itemName=NomicFoundation.hardhat-solidity).
 
-Use the built-in continuous integration in GitLab.
+For guidance on how to integrate a Foundry project in VSCode, please refer to this
+[guide](https://book.getfoundry.sh/config/vscode).
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Installing Dependencies
 
-***
+Foundry typically uses git submodules to manage dependencies, but this template uses Node.js packages.
 
-# Editing this README
+This is how to install dependencies:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+1. Install the dependency using your preferred package manager, e.g. `bun install dependency-name`
+   - Use this syntax to install from GitHub: `bun install github:username/repo-name`
+2. Add a remapping for the dependency in [remappings.txt](./remappings.txt), e.g.
+   `dependency-name=node_modules/dependency-name`
 
-## Suggestions for a good README
+## Writing Tests
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+To write a new test contract, you start by importing `Test` from `forge-std`, and then you inherit it in your test
+contract. Forge Std comes with a pre-instantiated [cheatcodes](https://book.getfoundry.sh/cheatcodes/) environment
+accessible via the `vm` property. If you would like to view the logs in the terminal output, you can add the `-vvv` flag
+and use [console.log](https://book.getfoundry.sh/faq?highlight=console.log#how-do-i-use-consolelog).
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+This is a list of the most frequently needed commands.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Build
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Build the contracts:
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```sh
+$ forge build
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Clean
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Delete the build artifacts and cache directories:
+
+```sh
+$ forge clean
+```
+
+### Compile
+
+Compile the contracts:
+
+```sh
+$ forge build
+```
+
+### Coverage
+
+Get a test coverage report:
+
+```sh
+$ forge coverage
+```
+
+### Deploy
+
+> [!NOTE]
+>
+> This section is only relevant for development purposes.
+
+Deploy to Anvil:
+
+Open a new terminal and run Anvil:
+```
+$ anvil
+```
+
+Then, in another terminal, run the deploy script:
+
+```sh
+$ forge script script/Deploy.s.sol --broadcast --fork-url http://localhost:8545
+```
+
+For this script to work, you need to have a `MNEMONIC` environment variable set to a valid
+[BIP39 mnemonic](https://iancoleman.io/bip39/).
+
+For instructions on how to deploy to a testnet or mainnet, check out the
+[Solidity Scripting](https://book.getfoundry.sh/tutorials/solidity-scripting.html) tutorial.
+
+### Format
+
+Format the contracts:
+
+```sh
+$ forge fmt
+```
+
+### Gas Usage
+
+Get a gas report:
+
+```sh
+$ forge test --gas-report
+```
+
+### Lint
+
+Lint the contracts:
+
+```sh
+$ bun run lint
+```
+
+### Test
+
+Run the tests:
+
+```sh
+$ forge test
+```
+
+### Test Coverage
+
+Generate test coverage and output result to the terminal:
+
+```sh
+$ bun run test:coverage
+```
+
+### Test Coverage Report
+
+Generate test coverage with lcov report (you'll have to open the `./coverage/index.html` file in your browser, to do so
+simply copy paste the path):
+
+```sh
+$ bun run test:coverage:report
+```
+
+## Related Efforts
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project is licensed by Fireblocks under AGPL.
