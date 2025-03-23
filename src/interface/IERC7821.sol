@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: Copyright (c) 2016-2025 Zeppelin Group Ltd
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.27;
 
 /**
  * @dev Interface for minimal batch executor.
