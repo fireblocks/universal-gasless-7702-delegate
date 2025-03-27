@@ -5,11 +5,11 @@ import { Test } from "forge-std/Test.sol";
 import { UniversalGaslessDelegate } from "../src/UniversalGaslessDelegate.sol";
 import { UniversalGaslessDelegationHelper } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
-import "./mocks/MockKillSwitch.sol";
-import "./mocks/MockCallTarget.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import { ERC7579Utils } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
+import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
+import { MockCallTarget } from "./mocks/MockCallTarget.sol";
 import { console2 } from "forge-std/console2.sol";
-import { ERC7579Utils, CallType, ExecType, Mode, ModeSelector } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
 /**
  * @title UniversalGaslessDelegateHarness
@@ -53,14 +53,11 @@ contract UniversalGaslessDelegateHarness is UniversalGaslessDelegate {
     {
         return _decodeOpData(opData);
     }
-    
+
     /**
      * @notice Expose internal function for testing call execution
      */
-    function exposed_call(address target, uint256 value, bytes calldata data) 
-        external 
-        returns (bytes memory) 
-    {
+    function exposed_call(address target, uint256 value, bytes calldata data) external returns (bytes memory) {
         return _call(target, value, data);
     }
 }
@@ -74,10 +71,10 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
 
     function setUp() public {
         // Set up mock killswitch
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
 
         // Create test harness with the mock killswitch
-        harness = new UniversalGaslessDelegateHarness(mockKillswitchContract);
+        harness = new UniversalGaslessDelegateHarness(address(killswitchContract));
     }
 
     // =============================================================
@@ -90,13 +87,13 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
     function test_ExecutionModeId_Supported() public view {
         // Mode 1: Single call with Auth mode
         // CallType = (0x00), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = ANY
-        bytes32 supportedMode1 = bytes32(uint256(0x00000000000078210001) << 8*22);
+        bytes32 supportedMode1 = bytes32(uint256(0x00000000000078210001) << 8 * 22);
         // Mode 2: Batch call with Auth mode
         // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = ANY
-        bytes32 supportedMode2 = bytes32(uint256(0x01000000000078210001) << 8*22);
+        bytes32 supportedMode2 = bytes32(uint256(0x01000000000078210001) << 8 * 22);
         // Mode 3: Batch call with Default mode
         // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x00000000), ModePayload = ANY
-        bytes32 supportedMode3 = bytes32(uint256(0x01000000000000000000) << 8*22);
+        bytes32 supportedMode3 = bytes32(uint256(0x01000000000000000000) << 8 * 22);
 
         // Call the exposed internal function for all supported modes
         uint8 modeId1 = harness.exposed_executionModeId(supportedMode1);
@@ -114,9 +111,10 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
      */
     function test_ExecutionModeId_Unsupported() public view {
         // Create unsupported execution modes
-        bytes32 unsupportedMode1 = bytes32(uint256(0x02000000000078210001) << 8*22); // Unsupported call type (0x02)
-        bytes32 unsupportedMode2 = bytes32(uint256(0x00010000000078210001) << 8*22); // Unsupported exec type (0x01)
-        bytes32 unsupportedMode3 = bytes32(uint256(0x00000000000012345678) << 8*22); // Unsupported mode selector (0x12345678)
+        bytes32 unsupportedMode1 = bytes32(uint256(0x02000000000078210001) << 8 * 22); // Unsupported call type (0x02)
+        bytes32 unsupportedMode2 = bytes32(uint256(0x00010000000078210001) << 8 * 22); // Unsupported exec type (0x01)
+        bytes32 unsupportedMode3 = bytes32(uint256(0x00000000000012345678) << 8 * 22); // Unsupported mode selector
+            // (0x12345678)
 
         // Test each unsupported mode
         uint8 modeId1 = harness.exposed_executionModeId(unsupportedMode1);
@@ -128,24 +126,19 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         assertEq(modeId2, 0, "Unsupported mode 2 should return ID 0");
         assertEq(modeId3, 0, "Unsupported mode 3 should return ID 0");
     }
-    
+
     /**
      * @notice Test that the function correctly identifies unsupported call types
      */
     function test_RevertWhen_DetermineExecutionModeRevertCause_UnsupportedCallType() public {
         // Create a mode with unsupported call type (0x02)
-        bytes32 unsupportedCallTypeMode = bytes32(hex"02000000000078210001"); 
+        bytes32 unsupportedCallTypeMode = bytes32(hex"02000000000078210001");
 
         // Expect revert with UnsupportedCallType error
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ERC7579Utils.ERC7579UnsupportedCallType.selector, 
-                bytes1(0x02)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(ERC7579Utils.ERC7579UnsupportedCallType.selector, bytes1(0x02)));
         harness.exposed_determineExecutionModeRevertCause(unsupportedCallTypeMode);
     }
-    
+
     /**
      * @notice Test that the function correctly identifies unsupported exec types
      */
@@ -155,15 +148,10 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes32 unsupportedExecTypeMode = bytes32(hex"00010000000078210001");
 
         // Expect revert with UnsupportedExecType error
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ERC7579Utils.ERC7579UnsupportedExecType.selector, 
-                bytes1(0x01)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(ERC7579Utils.ERC7579UnsupportedExecType.selector, bytes1(0x01)));
         harness.exposed_determineExecutionModeRevertCause(unsupportedExecTypeMode);
     }
-    
+
     /**
      * @notice Test that the function correctly identifies unsupported mode selectors
      */
@@ -173,15 +161,10 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes32 unsupportedModeSelectorMode = bytes32(hex"00000000000012345678");
 
         // Expect revert with UnsupportedModeSelector error
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LibErrors.UnsupportedModeSelector.selector, 
-                bytes4(hex"12345678")
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LibErrors.UnsupportedModeSelector.selector, bytes4(hex"12345678")));
         harness.exposed_determineExecutionModeRevertCause(unsupportedModeSelectorMode);
     }
-    
+
     /**
      * @notice Test that the function reverts with the default UnsupportedExecutionMode
      * for other error cases (this serves as a fallback test)
@@ -209,7 +192,8 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes memory executionData = abi.encode(callsData);
 
         // Call exposed function to extract OpData
-        (bytes memory extractedCalls, bytes memory extractedOpData) = harness.exposed_extractExecAndOpData(executionData);
+        (bytes memory extractedCalls, bytes memory extractedOpData) =
+            harness.exposed_extractExecAndOpData(executionData);
 
         // Verify results
         assertEq(keccak256(extractedCalls), keccak256(callsData), "Extracted calls should match original calls");
@@ -226,7 +210,8 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes memory executionData = abi.encode(callsData, opData);
 
         // Call exposed function to extract OpData
-        (bytes memory extractedCalls, bytes memory extractedOpData) = harness.exposed_extractExecAndOpData(executionData);
+        (bytes memory extractedCalls, bytes memory extractedOpData) =
+            harness.exposed_extractExecAndOpData(executionData);
 
         // Verify results
         assertEq(keccak256(extractedCalls), keccak256(callsData), "Extracted calls should match original calls");
@@ -261,7 +246,7 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
         harness.exposed_extractExecAndOpData(invalidData);
     }
-    
+
     /**
      * @notice Test extracting executionData with second offset less than 64 (fails with ExecutionDataExtractionError)
      */
@@ -271,34 +256,35 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes memory callsData = abi.encode("test call data");
         bytes memory opData = abi.encode("test op data");
         bytes memory executionData = abi.encode(callsData, opData);
-        
+
         // Modify the second offset to be less than 64
         assembly {
             // The second offset starts at position 64 (after length prefix and first offset)
             mstore(add(executionData, 64), 32) // Should be at least 64
         }
-        
+
         // Call should revert with ExecutionDataExtractionError
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
         harness.exposed_extractExecAndOpData(executionData);
     }
-    
+
     /**
-     * @notice Test extracting executionData with second offset exceeding data length (fails with ExecutionDataExtractionError)
+     * @notice Test extracting executionData with second offset exceeding data length (fails with
+     * ExecutionDataExtractionError)
      */
     function test_RevertWhen_ExtractExecAndOpData_ExcessiveOffset() public {
         // Create execution data with two offsets but second offset beyond data length
         bytes memory callsData = abi.encode("test call data");
         bytes memory opData = abi.encode("test op data");
         bytes memory executionData = abi.encode(callsData, opData);
-        
+
         // Modify the second offset to point beyond the total length
         uint256 dataLength = executionData.length;
         assembly {
             // Set the second offset to a value beyond the data length
             mstore(add(executionData, 64), add(dataLength, 100))
         }
-        
+
         // Call should revert with ExecutionDataExtractionError
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
         harness.exposed_extractExecAndOpData(executionData);
@@ -307,147 +293,150 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
     // =============================================================
     //                       CALL TESTS
     // =============================================================
-    
+
     /**
      * @notice Test calling a valid contract with data and ETH
      */
     function test_Call_SuccessWithValueAndData() public {
         // Deploy mock call target
         MockCallTarget target = new MockCallTarget();
-        
+
         // Prepare call data
         bytes memory callData = abi.encodeWithSignature("returnUint(uint256)", 42);
         uint256 callValue = 0.1 ether;
-        
+
         // Fund the harness contract
         vm.deal(address(harness), 1 ether);
-        
+
         // Execute the call through harness
         bytes memory returnData = harness.exposed_call(address(target), callValue, callData);
-        
+
         // Decode the return data
         uint256 returnedValue = abi.decode(returnData, (uint256));
-        
+
         // Verify results
         assertEq(returnedValue, 42, "Call should return the correct value");
         assertEq(target.storedValue(), callValue, "Target should receive the ETH value");
         assertEq(target.receivedValue(), callValue, "Target should record the correct received value");
         assertEq(address(target).balance, callValue, "Target balance should be updated");
     }
-    
+
     /**
      * @notice Test calling a contract that returns no data
      */
     function test_Call_SuccessWithEmptyReturn() public {
         // Deploy mock call target
         MockCallTarget target = new MockCallTarget();
-        
+
         // Prepare call data for fallback function (doesn't return data)
         bytes memory callData = hex"deadbeef"; // Random data for fallback
         uint256 callValue = 0.1 ether;
-        
+
         // Fund the harness contract
         vm.deal(address(harness), 1 ether);
-        
+
         // Execute the call through harness
         bytes memory returnData = harness.exposed_call(address(target), callValue, callData);
-        
+
         // Verify results
         assertEq(returnData.length, 0, "Return data should be empty");
         assertEq(target.storedValue(), callValue, "Target should receive the ETH value");
         assertEq(target.receivedValue(), callValue, "Target should record the correct received value");
         assertEq(address(target).balance, callValue, "Target balance should be updated");
-        
+
         // Verify lastData contains our callData
         assertEq(keccak256(target.lastData()), keccak256(callData), "Target should receive the correct call data");
     }
-    
+
     /**
-     * @notice Test calling a non-contract address
-     * @dev This test highlights that "value with memo" transfers to EOAs is not a valid execution
+     * @notice Test calling a non-contract address with value and data
+     * @dev This test checks that "value with memo" transfers to EOAs is a valid execution
      */
-    function test_RevertWhen_Call_NonContractAddressWithValue() public {
+    function test_Call_NonContractAddressWithValue() public {
         // Create an EOA (not a contract)
         address payable nonContract = payable(address(0x1234));
-        
+        // Record initial balance
+        uint256 initialBalance = nonContract.balance;
+
         // Prepare call data
         bytes memory callData = bytes("dosomething");
         uint256 callValue = 0.1 ether;
         // Fund the harness contract
         vm.deal(address(harness), 1 ether);
-        
-        // Expect revert when calling an EOA with value
-        vm.expectRevert(
-            abi.encodeWithSelector(Address.AddressEmptyCode.selector, nonContract)
-        );
-        harness.exposed_call(nonContract, callValue, callData);
+
+        // Execute the call through harness - should succeed
+        bytes memory returnData = harness.exposed_call(nonContract, callValue, callData);
+
+        // Verify results
+        assertEq(returnData.length, 0, "Return data should be empty");
+        assertEq(nonContract.balance, initialBalance + callValue, "Recipient should receive the ETH");
     }
-    
+
     /**
      * @notice Test calling a non-contract address with zero value doesn't revert
      */
     function test_Call_NonContractAddressWithZeroValue() public {
         // Create an EOA (not a contract)
         address payable nonContract = payable(address(0x1234));
-        
+
         // Prepare call data
         bytes memory callData = hex"deadbeef";
         uint256 callValue = 0; // No value
-        
+
         // Execute the call through harness - should not revert with zero value
         bytes memory returnData = harness.exposed_call(nonContract, callValue, callData);
-        
+
         // Verify return data is empty
         assertEq(returnData.length, 0, "Return data should be empty");
     }
-    
+
     /**
      * @notice Test sending ETH to an EOA with empty calldata
      */
     function test_Call_SendEthToEOA() public {
         // Create an EOA (not a contract)
         address payable recipient = payable(address(0x1234));
-        
+
         // Record initial balance
         uint256 initialBalance = recipient.balance;
-        
+
         // Prepare empty call data (simple ETH transfer)
         bytes memory callData = "";
         uint256 callValue = 0.5 ether;
-        
+
         // Fund the harness contract
         vm.deal(address(harness), 1 ether);
-        
+
         // Execute the call through harness - should succeed with empty calldata
         bytes memory returnData = harness.exposed_call(recipient, callValue, callData);
-        
+
         // Verify results
         assertEq(returnData.length, 0, "Return data should be empty");
         assertEq(recipient.balance, initialBalance + callValue, "Recipient should receive the ETH");
     }
-    
+
     /**
      * @notice Test calling a contract that reverts
      */
     function test_RevertWhen_Call_ContractReverts() public {
         // Deploy mock call target
         MockCallTarget target = new MockCallTarget();
-        
+
         // Make target revert on calls
         target.setShouldRevert(true);
-        
+
         // Prepare call data
         bytes memory callData = hex"deadbeef";
         uint256 callValue = 0.1 ether;
-        
+
         // Fund the harness contract
         vm.deal(address(harness), 1 ether);
-        
+
         // Expect revert with target's revert message
         vm.expectRevert("MockCallTarget: reverted as requested");
         harness.exposed_call(address(target), callValue, callData);
     }
-    
+
     // =============================================================
     //                  OP DATA DECODING TESTS
     // =============================================================

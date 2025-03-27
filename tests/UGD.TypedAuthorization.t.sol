@@ -23,7 +23,7 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         // Set up users with makeAddrAndKey
         (userA, userAPrivateKey) = makeAddrAndKey("userA");
         vm.deal(userA, 10 ether);
-        
+
         (userB, userBPrivateKey) = makeAddrAndKey("userB");
         vm.deal(userB, 10 ether);
 
@@ -31,10 +31,10 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         nonDelegatedAccount = userB;
 
         // Set up mock killswitch
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
 
         // Create UniversalGaslessDelegate
-        gaslessDelegate = new UniversalGaslessDelegate(mockKillswitchContract);
+        gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
 
         // Set up delegation for userA to gaslessDelegate
         delegatedAccount =
@@ -61,13 +61,13 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
             bytes32 salt,
             uint256[] memory extensions
         ) = delegatedAccount.eip712Domain();
-        
+
         // Verify the returned values
         assertEq(fields, hex"0c", "Fields should be 0c (01100)"); // chainId + verifyingContract
         assertEq(name, "", "Name should be empty");
         assertEq(version, "", "Version should be empty");
         assertEq(chainId, block.chainid, "ChainId should match current chain");
-        assertEq(verifyingContract, address(userA), "VerifyingContract should be the delegated account address (userA)");
+        assertEq(verifyingContract, address(userA), "VerifyingContract should be the delegated account (userA)");
         assertEq(salt, bytes32(0), "Salt should be empty");
         assertEq(extensions.length, 0, "Extensions should be empty");
     }
@@ -81,33 +81,17 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         uint256 userCPrivateKey;
         (userC, userCPrivateKey) = makeAddrAndKey("userC");
         vm.deal(userC, 10 ether);
-        
-        UniversalGaslessDelegate delegatedAccountC = 
+
+        UniversalGaslessDelegate delegatedAccountC =
             UniversalGaslessDelegate(payable(setupDelegation(userC, userCPrivateKey, address(gaslessDelegate))));
-        
+
         // Get eip712Domain info from both delegated accounts
         vm.prank(address(0));
-        (
-            ,
-            ,
-            ,
-            ,
-            address verifyingContractA,
-            ,
-            
-        ) = delegatedAccount.eip712Domain();
-        
+        (,,,, address verifyingContractA,,) = delegatedAccount.eip712Domain();
+
         vm.prank(address(0));
-        (
-            ,
-            ,
-            ,
-            ,
-            address verifyingContractC,
-            ,
-            
-        ) = delegatedAccountC.eip712Domain();
-        
+        (,,,, address verifyingContractC,,) = delegatedAccountC.eip712Domain();
+
         // Verify that the verifying contracts are different
         assertEq(verifyingContractA, address(userA), "First account's verifying contract should be userA");
         assertEq(verifyingContractC, address(userC), "Second account's verifying contract should be userC");
@@ -120,32 +104,16 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
     function test_Eip712Domain_DifferentChain() public {
         // Get eip712Domain info on the current chain
         vm.prank(address(0));
-        (
-            ,
-            ,
-            ,
-            uint256 originalChainId,
-            address originalContract,
-            ,
-            
-        ) = delegatedAccount.eip712Domain();
-        
+        (,,, uint256 originalChainId, address originalContract,,) = delegatedAccount.eip712Domain();
+
         // Simulate a different chain ID
         uint256 newChainId = block.chainid + 1;
         vm.chainId(newChainId);
-        
+
         // Get the domain info after changing the chain ID
         vm.prank(address(0));
-        (
-            ,
-            ,
-            ,
-            uint256 newDomainChainId,
-            address newDomainContract,
-            ,
-            
-        ) = delegatedAccount.eip712Domain();
-        
+        (,,, uint256 newDomainChainId, address newDomainContract,,) = delegatedAccount.eip712Domain();
+
         // Verify that the chain ID has changed but the verifying contract remains the same
         assertEq(originalChainId, block.chainid - 1, "Original chain ID should match initial chain ID");
         assertEq(newDomainChainId, newChainId, "New domain chain ID should match new chain ID");

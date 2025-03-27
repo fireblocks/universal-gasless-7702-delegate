@@ -154,22 +154,26 @@ contract KillSwitchTest is Test {
     //             OWNERSHIP TESTS
     // =============================================
 
-    function test_transferOwnershipDisabled() public {
-        // Attempting to transfer ownership should revert even for owner
+    function test_transferOwnershipAsOwner() public {
+        address newOwner = makeAddr("newOwner");
+        // Owner should be able to transfer ownership
         vm.prank(killswitchOwner);
-        vm.expectRevert(abi.encodeWithSignature("FunctionDisabled()"));
-        killSwitch.transferOwnership(nonOwner);
 
-        // Check ownership remains intact
-        assertEq(killSwitch.owner(), killswitchOwner, "Owner should remain unchanged");
+        // Expect OwnershipTransferred event
+        vm.expectEmit(true, true, false, false);
+        emit OwnershipTransferred(killswitchOwner, newOwner);
+
+        killSwitch.transferOwnership(newOwner);
+
+        // Check ownership has been transferred
+        assertEq(killSwitch.owner(), newOwner, "Owner should be updated to the new address");
     }
 
     function test_RevertWhen_transferOwnershipAsNonOwner() public {
-        // Non-owner attempting to transfer ownership should also revert
-        // with the same error (function disabled)
+        // Non-owner attempting to transfer ownership should revert
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSignature("FunctionDisabled()"));
-        killSwitch.transferOwnership(killswitchOwner);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        killSwitch.transferOwnership(nonOwner);
 
         // Check ownership remains intact
         assertEq(killSwitch.owner(), killswitchOwner, "Owner should remain unchanged");
@@ -193,25 +197,24 @@ contract KillSwitchTest is Test {
         assertEq(killSwitch.owner(), zeroAddress, "Owner should be zero address after renouncing");
     }
 
-    function test_RevertIf_renounceOwnershipWhenNotPaused() public {
+    function test_renounceOwnershipWhenNotPaused() public {
         // Contract is not paused by default
+        assertFalse(killSwitch.paused(), "Contract should not be paused");
 
-        // Attempt to renounce ownership without pausing first
+        // Owner should be able to renounce ownership even when not paused
         vm.prank(killswitchOwner);
 
-        // Should revert with ExpectedPause error
-        vm.expectRevert(abi.encodeWithSignature("ExpectedPause()"));
+        // Expect OwnershipTransferred event
+        vm.expectEmit(true, true, false, false);
+        emit OwnershipTransferred(killswitchOwner, zeroAddress);
+
         killSwitch.renounceOwnership();
 
-        // Check ownership remains intact
-        assertEq(killSwitch.owner(), killswitchOwner, "Owner should remain unchanged");
+        // Verify ownership has been renounced
+        assertEq(killSwitch.owner(), zeroAddress, "Owner should be zero address after renouncing");
     }
 
     function test_RevertIf_renounceOwnershipAsNonOwner() public {
-        // First pause the contract to satisfy whenPaused
-        vm.prank(killswitchOwner);
-        killSwitch.pause();
-
         // Non-owner should not be able to renounce ownership
         vm.prank(nonOwner);
 

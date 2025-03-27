@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: Copyright (C) 2024 Fireblocks <support@fireblocks.com>
+// SPDX-FileCopyrightText: Copyright (C) 2025 Fireblocks <support@fireblocks.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -21,54 +21,45 @@ pragma solidity ^0.8.27;
  * @notice The Errors Library provides error messages for the Fireblocks ecosystem of smart contracts.
  */
 library LibErrors {
-    /// Errors
-
     /**
-     * @notice This error indicates that the operation failed because the contract is paused.
-     * @dev The operation failed because the contract is paused.
-     *
-     * Moved into a library to avoid the need for a contract to inherit/import from {Pausable}. This error is original
-     * from OpenZeppelin's {Pausable} contract:
-     * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/Pausable.sol
-     */
-    error EnforcedPause();
-
-    /**
+     * @notice This error indicates that the function called is inoperable.
      * @notice Thrown when an inherited function has been disabled.
      */
     error FunctionDisabled();
 
     /**
-     * @dev Indicates a failure that an address is not valid.
-     */
-    error InvalidAddress();
-
-    /**
+     * @notice This error indicates that a nonce has already been used.
      * @dev The nonce has already been used for this account.
      */
     error InvalidNonce();
 
     /**
+     * @notice This error indicates that a address provided does not implement a required interface.
      * @dev Indicates that a contract does not implement a required interface.
      */
     error InvalidImplementation();
 
     /**
+     * @notice This error indicates that there was an error decoding the opData parameter.
      * @dev Indicates that there was an error decoding the operation data (opData).
      */
     error OpDataDecodingError();
 
     /**
-     * @dev Indicates that there was an error extracting data from the execution payload.
+     * @notice This error indicates that there was an error extracting data from the execution payload.
+     * @dev Indicates that there was an error decoding the execution payload based on an expected structure.
      */
     error ExecutionDataExtractionError();
 
     /**
+     * @notice This error indicates that the function caller is not the expected. For example, not the EOA itself.
      * @dev Indicates that the function caller is not the expected address.
      */
     error UnauthorizedCaller();
 
     /**
+     * @notice This error indicates that a call is being invoked in the wrong target. For example, the implementation
+     * contract instead of the Delegated EOA address.
      * @dev Indicates that the call is from an unauthorized context, such as a direct call to the
      * implementation contract.
      */
@@ -99,8 +90,46 @@ library LibErrors {
     error UnsupportedExecutionMode();
 
     /**
+     * @notice This error indicates that the execution mode selector is not supported by the contract.
      * @dev Indicates that the execution mode selector is not supported by the contract.
      * @param modeSelector The function selector that was not recognized as a valid mode.
      */
     error UnsupportedModeSelector(bytes4 modeSelector);
+
+    // ==================== IMPORTED ERRORS ====================
+    // These are errors that are observed in inherited contracts
+    // or libraries and therefore are known to be thrown by the
+    // contract. They are collated here for developer convenience.
+    // =========================================================
+
+    /**
+     * @notice This error indicates that the operation failed because the contract is paused.
+     * @dev The operation failed because the contract is paused.
+     *
+     * Moved into a library to avoid the need for a contract to inherit/import from {Pausable}. This error is original
+     * from OpenZeppelin's {Pausable} contract:
+     * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/Pausable.sol
+     */
+    error EnforcedPause();
+
+    /**
+     * @notice This error indicates that a call to the `execute` function on the same Delegate EOA was attempted, from
+     * the context of a running `execute` function. This would indicate a reentrant call, and therefore is blocked.
+     * @dev Thrown when a reentrant call is detected.
+     */
+    error ReentrantCall();
+
+    /**
+     * @notice This error indicates that an ERC7579 execute "call type" is not supported.
+     * @dev Thrown when an unsupported call type is used in an EIP-7579 execution mode.
+     * @param callType The unsupported call type byte.
+     */
+    error ERC7579UnsupportedCallType(bytes1 callType);
+
+    /**
+     * @notice This error indicates that an ERC7579 execute "execution type" is not supported.
+     * @dev Thrown when an unsupported exec type is used in an EIP-7579 execution mode.
+     * @param execType The unsupported execution type byte.
+     */
+    error ERC7579UnsupportedExecType(bytes1 execType);
 }

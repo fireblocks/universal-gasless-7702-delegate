@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: Copyright (C) 2024 Fireblocks <support@fireblocks.com>
+// SPDX-FileCopyrightText: Copyright (C) 2025 Fireblocks <support@fireblocks.com>
 
 pragma solidity 0.8.27;
 
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { IERC5267 } from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import { Execution } from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
-// import { console2 } from "forge-std/console2.sol";
 
 /**
  * @title Typed Structured Execution Authorization
@@ -50,6 +49,7 @@ abstract contract TypedAuthorization is IERC5267 {
      * This defines the structure of the typed data that will be signed for authorizing executions
      */
     bytes32 internal constant _EXECUTION_AUTHORIZATION_TYPEHASH = keccak256(
+        // solhint-disable-next-line max-line-length
         "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
     );
 
@@ -76,8 +76,8 @@ abstract contract TypedAuthorization is IERC5267 {
     {
         return (
             hex"0c", // 01100
-            string(hex""), // empty name
-            string(hex""), // empty version
+            string(""), // empty name
+            string(""), // empty version
             block.chainid,
             address(this),
             bytes32(0), // empty salt
@@ -102,7 +102,7 @@ abstract contract TypedAuthorization is IERC5267 {
      * @notice Given a hashed struct, returns the hash of the fully encoded EIP712 message for this domain.
      *
      * See https://eips.ethereum.org/EIPS/eip-712#definition-of-hashstruct[definition of hashed struct].
-     * 
+     *
      * @dev This hash can be used with {ECDSA-recover} to obtain the signer of a message
      *
      * @param structHash The hash of the struct being signed

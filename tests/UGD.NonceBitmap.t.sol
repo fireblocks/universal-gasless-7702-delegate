@@ -22,10 +22,10 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
         vm.deal(userA, 10 ether);
 
         // Set up mock killswitch
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
 
         // Create UniversalGaslessDelegate
-        gaslessDelegate = new UniversalGaslessDelegate(mockKillswitchContract);
+        gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
 
         // Set up delegation for userA to gaslessDelegate
         delegatedAccount =
@@ -91,66 +91,6 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
     }
 
     /**
-     * @dev Test nextNonce returns the correct next available nonce
-     */
-    function test_NextNonce() public {
-        // Initially nextNonce should be 0
-        assertEq(delegatedAccount.nextNonce(), 0, "Initial nextNonce should be 0");
-
-        // Use nonce 0
-        vm.prank(userA);
-        delegatedAccount.invalidateNonce(0);
-
-        // nextNonce should now be 1
-        assertEq(delegatedAccount.nextNonce(), 1, "nextNonce should be 1 after using nonce 0");
-
-        // Use nonce 1 and 2
-        vm.startPrank(userA);
-        delegatedAccount.invalidateNonce(1);
-        delegatedAccount.invalidateNonce(2);
-        vm.stopPrank();
-
-        // nextNonce should now be 3
-        assertEq(delegatedAccount.nextNonce(), 3, "nextNonce should be 3 after using nonces 0, 1, and 2");
-    }
-
-    /**
-     * @dev Test nextNonceAfter returns the correct next available nonce after a given nonce
-     */
-    function test_NextNonceAfter() public {
-        // Use nonces 5, 6, and 8
-        vm.startPrank(userA);
-        delegatedAccount.invalidateNonce(5);
-        delegatedAccount.invalidateNonce(6);
-        delegatedAccount.invalidateNonce(8);
-        vm.stopPrank();
-
-        // Next nonce after 4 should be 7 (since 5 and 6 are used)
-        assertEq(delegatedAccount.nextNonceAfter(4), 7, "Next nonce after 4 should be 7");
-
-        // Next nonce after 7 should be 9 (since 8 is used)
-        assertEq(delegatedAccount.nextNonceAfter(7), 9, "Next nonce after 7 should be 9");
-    }
-
-    /**
-     * @dev Test nextNonceAfter handles wraparound to next word correctly
-     */
-    function test_NextNonceAfter_WordWraparound() public {
-        // Use the last nonce in word 0
-        uint256 lastNonceInWord0 = 0x00ff; // Position 255 in word 0
-        vm.prank(userA);
-        delegatedAccount.invalidateNonce(lastNonceInWord0);
-
-        // Next nonce after the last in word 0 should be the first in word 1
-        uint256 firstNonceInWord1 = 0x0100; // Position 0 in word 1
-        assertEq(
-            delegatedAccount.nextNonceAfter(lastNonceInWord0),
-            firstNonceInWord1,
-            "Next nonce after last in word 0 should be first in word 1"
-        );
-    }
-
-    /**
      * @dev Test that multiple nonces can be used in the same word
      */
     function test_MultipleNoncesInSameWord() public {
@@ -198,118 +138,6 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
         assertEq(delegatedAccount.getNonceBitmap(2), expectedBit, "Bitmap for word 2 should have bit 42 set");
     }
 
-    /**
-     * @dev Test finding next nonce when a full word is used
-     */
-    function test_NextNonceWithPartialWordUsed() public {
-        // Fill up a word with used nonces (using a smaller number of positions)
-        uint256 wordPos = 5;
-        vm.startPrank(userA);
-
-        // Fill just 32 positions for test
-        for (uint256 i = 0; i < 32; i++) {
-            uint256 nonce = (wordPos << 8) | i;
-            delegatedAccount.invalidateNonce(nonce);
-        }
-        vm.stopPrank();
-
-        // The bitmap should have the right pattern of bits set
-        uint256 expectedBitmap = (1 << 32) - 1; // All bits set from 0 to 31
-        assertEq(
-            delegatedAccount.getNonceBitmap(wordPos) & expectedBitmap,
-            expectedBitmap,
-            "Bitmap should have the expected bits set"
-        );
-
-        // The next nonce should be position 32 in this word
-        uint256 expectedNextNonce = (wordPos << 8) | 32;
-        assertEq(
-            delegatedAccount.nextNonceAfter((wordPos << 8) | 31),
-            expectedNextNonce,
-            "Next nonce should be the first unused position after the filled section"
-        );
-    }
-
-    /**
-     * @dev Test finding next nonce when a full word is used
-     */
-    function test_NextNonceWithFullWord() public {
-        vm.startPrank(userA);
-        // Fill an entire word with used nonces
-        uint256 wordPos = 5;
-        for (uint256 i = 0; i < 256; i++) {
-            uint256 nonce = (wordPos << 8) | i;
-            delegatedAccount.invalidateNonce(nonce);
-        }
-        vm.stopPrank();
-
-        // The bitmap for word 5 should now be all 1's
-        assertEq(delegatedAccount.getNonceBitmap(wordPos), type(uint256).max, "Bitmap should be all 1's");
-
-        // The next nonce should be in the next word
-        uint256 expectedNextNonce = ((wordPos + 1) << 8) | 0; // First position in next word
-
-        // Get the next nonce after the last nonce in the full word
-        uint256 lastNonceInFullWord = (wordPos << 8) | 255;
-        uint256 actualNextNonce = delegatedAccount.nextNonceAfter(lastNonceInFullWord);
-
-        assertEq(actualNextNonce, expectedNextNonce, "Next nonce should be in the next word");
-    }
-
-    /**
-     * @dev Test nextNonce behavior with mixed usage pattern
-     */
-    function test_NextNonceMixedUsage() public {
-        // Create a pattern with gaps
-        vm.startPrank(userA);
-        delegatedAccount.invalidateNonce(1);
-        delegatedAccount.invalidateNonce(3);
-        delegatedAccount.invalidateNonce(5);
-        vm.stopPrank();
-
-        // nextNonce should find the first gap (0)
-        assertEq(delegatedAccount.nextNonce(), 0, "First available nonce should be 0");
-
-        // Use nonce 0
-        vm.prank(userA);
-        delegatedAccount.invalidateNonce(0);
-
-        // nextNonce should now find the next gap (2)
-        assertEq(delegatedAccount.nextNonce(), 2, "Next available nonce should be 2");
-
-        // Use several more nonces to create a more complex pattern
-        vm.startPrank(userA);
-        delegatedAccount.invalidateNonce(2);
-        delegatedAccount.invalidateNonce(4);
-        vm.stopPrank();
-
-        // nextNonce should now find 6
-        assertEq(delegatedAccount.nextNonce(), 6, "Next available nonce should be 6");
-    }
-
-    /**
-     * @dev Test nextNonceAfter behavior with mixed usage pattern
-     */
-    function test_NextNonceAfterMixedUsage() public {
-        // Create a pattern with gaps
-        vm.startPrank(userA);
-        delegatedAccount.invalidateNonce(1);
-        delegatedAccount.invalidateNonce(3);
-        delegatedAccount.invalidateNonce(type(uint256).max);
-        vm.stopPrank();
-
-        // nextNonce should find the first gap (0)
-        assertEq(delegatedAccount.nextNonce(), 0, "First available nonce should be 0");
-
-        // Use nonce 0
-        vm.prank(userA);
-        delegatedAccount.invalidateNonce(0);
-
-        // nextNonceAfter should wrap around and find the next gap (2)
-        // start nonce value MAX_UINT256 - 1 is still valid
-        assertEq(delegatedAccount.nextNonceAfter(type(uint256).max - 1), 2, "Next available nonce should be 2");
-    }
-
     // =============================================================
     //                   NEGATIVE TEST CASES
     // =============================================================
@@ -352,7 +180,7 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
         vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
         gaslessDelegate.invalidateNonce(nonce);
     }
-    
+
     /**
      * @dev Test that calling getNonceBitmap directly on implementation reverts
      */
@@ -361,7 +189,7 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
         vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
         gaslessDelegate.getNonceBitmap(0);
     }
-    
+
     /**
      * @dev Test that calling isNonceUsed directly on implementation reverts
      */
@@ -369,24 +197,6 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
         // Try to call isNonceUsed directly on the implementation
         vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
         gaslessDelegate.isNonceUsed(42);
-    }
-    
-    /**
-     * @dev Test that calling nextNonce directly on implementation reverts
-     */
-    function test_RevertWhen_CallingNextNonceOnImplementationAddress() public {
-        // Try to call nextNonce directly on the implementation
-        vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
-        gaslessDelegate.nextNonce();
-    }
-    
-    /**
-     * @dev Test that calling nextNonceAfter directly on implementation reverts
-     */
-    function test_RevertWhen_CallingNextNonceAfterOnImplementationAddress() public {
-        // Try to call nextNonceAfter directly on the implementation
-        vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
-        gaslessDelegate.nextNonceAfter(42);
     }
 
     // =============================================================
@@ -416,30 +226,5 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
             expectedBit,
             "Bitmap should have the correct bit set"
         );
-    }
-
-    /**
-     * @dev Test for nextNonceAfter behavior with fuzzed input
-     */
-    function testFuzz_NextNonceAfter(uint248 wordPos, uint8 bitPos) public {
-        // Use a specific nonce
-        uint256 nonce = (uint256(wordPos) << 8) | bitPos;
-
-        vm.prank(userA);
-        delegatedAccount.invalidateNonce(nonce);
-
-        uint256 nna = delegatedAccount.nextNonceAfter(nonce);
-        // If we're at position 255, the next nonce would be in the next word
-        if (bitPos == 255) {
-            uint256 expectedNextNonce = (uint256(wordPos) + 1) << 8; // First position in next word
-            assertEq(nna, expectedNextNonce, "Next nonce after bit 255 should be in next word");
-        }
-
-        // Confirm the returned nonce is greater than our original nonce, unless it's the maximum possible nonce value
-        if (wordPos != type(uint248).max) {
-            assertTrue(nna > nonce, "Next nonce should be greater than the given nonce");
-        }
-        // Confirm the returned nonce is valid (not already used)
-        assertFalse(delegatedAccount.isNonceUsed(nna), "Found nonce should not already be used");
     }
 }

@@ -34,10 +34,10 @@ contract UGDERC165Test is Test, UniversalGaslessDelegationHelper {
 
     function setUp() public {
         // Set up mock killswitch
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
 
         // Create UniversalGaslessDelegate
-        gaslessDelegate = new UniversalGaslessDelegate(mockKillswitchContract);
+        gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
 
         // Set up a user with private key
         (userA, userAPrivateKey) = makeAddrAndKey("delegatingUserA");

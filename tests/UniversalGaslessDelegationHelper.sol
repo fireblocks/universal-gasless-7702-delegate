@@ -6,6 +6,7 @@ import { CommonBase } from "forge-std/Base.sol";
 import { StdAssertions } from "forge-std/StdAssertions.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { UniversalGaslessDelegate } from "../src/UniversalGaslessDelegate.sol";
+import { IKillSwitch } from "../src/interface/IKillSwitch.sol";
 
 /**
  * @title UniversalGaslessDelegationHelper
@@ -22,7 +23,7 @@ abstract contract UniversalGaslessDelegationHelper is CommonBase, StdAssertions 
     // }
 
     UniversalGaslessDelegate gaslessDelegate;
-    address mockKillswitchContract;
+    IKillSwitch killswitchContract;
 
     /**
      * @dev Sets up a delegation for an EOA to use a specific implementation

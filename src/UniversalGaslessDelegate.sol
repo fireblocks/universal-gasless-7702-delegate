@@ -20,16 +20,16 @@ import { NonceBitmap } from "./mixins/NonceBitmap.sol";
 import { NonceStorage } from "./library/NonceStorageStruct.sol";
 import { LibErrors } from "./library/LibErrors.sol";
 import { IKillSwitch } from "./interface/IKillSwitch.sol";
-// import { console2 } from "forge-std/console2.sol";
+
 /**
  * @title UniversalGaslessDelegate
- * @notice An EIP-7702 compatible delegate contract for enabling gasless transactions through delegation. This 
+ * @notice An EIP-7702 compatible delegate contract for enabling gasless transactions through delegation. This
  *         contract implements a pattern where logic can execute on behalf of users who have signed authorized payload.
- * 
- * @dev Implements flexible standards such as EIP-7821 to enhance the EOA experience with contract functionality. It 
+ *
+ * @dev Implements flexible standards such as EIP-7821 to enhance the EOA experience with contract functionality. It
  *      allows third partides to submit transactions for execution on behalf of users (i.e. gasless operations), as
  *      long as users have provided the necessary authorization.
- *      
+ *
  * Core Features:
  * - Leverages on EIP-7702 for delegate-based transaction execution
  * - Supports EIP-7579/EIP-7821 execution modes for single and batch transactions (see {supportsExecutionMode})
@@ -40,29 +40,16 @@ import { IKillSwitch } from "./interface/IKillSwitch.sol";
  * - Emergency pause functionality via KillSwitch contract
  */
 contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenReceiver, TypedAuthorization {
-    using ERC7579Utils for bytes32;
-    using ERC7579Utils for Mode;
-    using ERC7579Utils for CallType;
-    using ERC7579Utils for ExecType;
-
-    // =============================================================
-    //                           STRUCTS
-    // =============================================================
-
-    // /**
-    //  * @dev Structure for execution data as per EIP-7579
-    //  */
-    // struct Execution {
-    //     address target;
-    //     uint256 value;
-    //     bytes callData;
-    // }
-
     // =============================================================
     //                  CONSTANTS / IMMUTABLE
     // =============================================================
 
-    address private immutable __implementation = address(this);
+    /**
+     * @notice The address of the implementation contract
+     * @dev This is used to detect direct calls to the implementation contract. It is set to the address of the
+     *      implementation contract at deployment time.
+     */
+    address private immutable __implementation = address(this); // solhint-disable-line immutable-vars-naming
 
     /**
      * @dev Storage location for the nonce bitmap. Derived from performing the following operation:
@@ -77,7 +64,31 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *      that can pause operations in case of emergencies. The contract is checked for validity
      *      and unpaused status during construction.
      */
-    IKillSwitch public immutable killswitchContract;
+    IKillSwitch private immutable _KILLSWITCH_CONTRACT;
+
+    /**
+     * @notice Internal identifier for handling a single call with opData authorization mode
+     * @dev This corresponds to CallType = Single (0x00), ExecType = Revert (0x00),
+     *      ModeSelector = Auth via opData (0x78210001)
+     */
+    uint8 internal constant SINGLE_CALL_OPDATA_AUTH = 1;
+
+    /**
+     * @notice Internal identifier for handling a batch call with opData authorization mode
+     * @dev This corresponds to CallType = Batch (0x01), ExecType = Revert (0x00),
+     *      ModeSelector = Auth via opData (0x78210001)
+     */
+    uint8 internal constant BATCH_CALL_OPDATA_AUTH = 2;
+
+    /**
+     * @notice Internal identifier for handling a batch call with self-call authorization mode
+     * @dev This corresponds to CallType = Batch (0x01), ExecType = Revert (0x00),
+     *     ModeSelector = Default (0x00000000)
+     *
+     * Used for a batch call execution mode where execution authorization is implied by requiring the caller to
+     * be the account itself.
+     */
+    uint8 internal constant BATCH_CALL = 3;
 
     // =============================================================
     //                          STATE STORAGE
@@ -122,7 +133,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *      emergency situations.
      */
     modifier whenNotPaused() {
-        if (killswitchContract.paused()) revert LibErrors.EnforcedPause();
+        if (_KILLSWITCH_CONTRACT.paused()) revert LibErrors.EnforcedPause();
         _;
     }
 
@@ -135,23 +146,20 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *
      * @dev Calling Conditions:
      *
-     * - `_killswitchContract` must not be the zero address
-     * - `_killswitchContract` must implement {IKillSwitch}
-     * - `_killswitchContract` must not be in paused state
+     * - `killswitchContract` must not be the zero address
+     * - `killswitchContract` must implement {IKillSwitch}
+     * - `killswitchContract` must not be in paused state
      *
      * Reverts with:
      * - no error data (i.e. standard `revert()`) if the contract does not return a bool value on the
      *   static-call to `paused()`
      * - `InvalidImplementation()` if the contract is paused
-     * @param _killswitchContract Address of the killswitch contract
+     * @param killswitchContract Address of the killswitch contract
      */
-    constructor(address _killswitchContract) {
-        killswitchContract = IKillSwitch(_killswitchContract);
+    constructor(address killswitchContract) {
+        _KILLSWITCH_CONTRACT = IKillSwitch(killswitchContract);
         // check if it is a valid IKillSwitch contract that is not paused
-        require(killswitchContract.paused() == false, LibErrors.InvalidImplementation());
-
-        // Initialize EIP-712 domain separator
-        // DOMAIN_SEPARATOR = keccak256("");
+        require(_KILLSWITCH_CONTRACT.paused() == false, LibErrors.InvalidImplementation());
     }
 
     // ==================== EXTERNAL AND PUBLIC ====================
@@ -191,28 +199,38 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * format and execution data structure. This function supports three different execution modes as detailed in
      * {supportsExecutionMode}.
      *
-     * The `executionData` parameter follows EIP-7821 encoding rules. Refer to {_extractExecAndOpData} for the meaning
-     * of "calls":
-     *   - For modes with opData authorization (modeId 1 and 2): `abi.encode(calls, opData)` where `opData` contains
-     *     nonce and signature
-     *   - For self-call mode (modeId 3): `abi.encode(calls)` with no opData
+     * The `executionData` parameter follows EIP-7821 encoding rules:
+     *   - For modes with opData for authorization (SINGLE_CALL_OPDATA_AUTH and BATCH_CALL_OPDATA_AUTH) the following
+     *     encoding is expected `abi.encode(sobExecutionData, opData)`, where:
+     *     - in SINGLE_CALL_OPDATA_AUTH, `sobExecutionData` is abi.encodePacked(target, value, callData)
+     *     - in BATCH_CALL_OPDATA_AUTH, `sobExecutionData` is abi.encode(calls)
+     *     - `opData` is abi.encodePacked(nonce, signature)
+     *   - For self-call mode (BATCH_CALL): `abi.encode(calls)` with no optional `opData`
      *
      * Authorization flow:
-     * 1. For modes with opData authorization (modeId 1 and 2):
+     *
+     * Note that while for mode BATCH_CALL_OPDATA_AUTH, opData is optional (fallback to `msg.sender` verification),
+     * for mode SINGLE_CALL_OPDATA_AUTH, opData is required (no fallback to `msg.sender`). For a single call of this
+     * type, the EOA should be making the call to target directly and not through the delegate contract.
+     *
+     * 1. For modes with opData authorization (SINGLE_CALL_OPDATA_AUTH and BATCH_CALL_OPDATA_AUTH):
      *   - Calculate authorization digest using EIP-712 typed data signing
      *   - Validate that the nonce is not already used
      *   - Verify signature matches the Delegated EOA's
+     * 2. For self-call mode (BATCH_CALL only):
+     *    - Verify caller is the delegated EOA itself (`msg.sender == address(this)`)
      *
-     * 2. For self-call mode (modeId 3):
-     *    - Verify caller is the delegated EOA itself (msg.sender == address(this))
+     * Note: This implementation does NOT perform the target replacement gas optimization listed in EIP-7821.
+     * Explicitly, {_call} will NOT replace `address(0)` with `address(this)` as the `target` parameter.
+     *
+     * Note: The ERC7579Utils.decodeBatch function performs validation and will throw
+     * {ERC7579DecodingError} if the input is not properly formatted.
      *
      * Calling Conditions:
      * - The function should be called in the context of the Delegated EOA. Calling it directly on the implementation
      *   address will revert. (checked by `onlyProxy`)
      * - The implementation contract should not be paused. (checked by `whenNotPaused`)
-     *
-     * Note: The ERC7579Utils.decodeBatch function performs validation and will throw
-     * {ERC7579DecodingError} if the input is not properly formatted.
+     * - If the target of the execution is the Delegated EOA itself, it can only call the `invalidateNonce` function.
      *
      * @param mode The execution mode that defines how the execution data should be processed
      * @param executionData The encoded execution data and optional authorization data (opData)
@@ -220,21 +238,19 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     function execute(bytes32 mode, bytes calldata executionData) external payable whenNotPaused onlyProxy {
         // Decode the execution data according to the mode
         uint8 modeId = _executionModeId(mode);
-
         // Revert if mode is not supported
         if (modeId == 0) _determineExecutionModeRevertCause(mode);
 
-        // Handle different execution modes that expect opData
-        if (modeId < 3) {
-            // Extract single-or-batch execution data and opData for authorization
-            bytes calldata sobExecutionData;
-            bytes calldata opData;
-            (sobExecutionData, opData) = _extractExecAndOpData(executionData);
-            // Decode opData to extract nonce and signature
+        bytes calldata sobExecutionData;
+        bytes calldata opData;
+        (sobExecutionData, opData) = _extractExecAndOpData(executionData);
+        // Check if optional opData is present. If not, we rely on the caller being the Delegated EOA itself for auth
+        if (opData.length != 0) {
+            // Check if the opData is valid. Decode opData to extract nonce and signature
             (uint256 nonce, bytes calldata signature) = _decodeOpData(opData);
-            // irrespective of single or batch, the nonce is always used on modes 1 and 2
+            // irrespective of single or batch, the nonce is always used on modes with opData auth
             _useUnorderedNonce(nonce);
-            if (modeId == 1) {
+            if (modeId == SINGLE_CALL_OPDATA_AUTH) {
                 // Perform authentication using opData and execute single call
                 (address target, uint256 value, bytes calldata callData) = ERC7579Utils.decodeSingle(sobExecutionData);
                 // create AuthorizedExecutions EIP712 hash
@@ -245,21 +261,22 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
                 _call(target, value, callData);
                 return;
             }
-            // modeId == 2
-            // Perform authentication using opData and execute batch calls
-            Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(sobExecutionData);
-            // create AuthorizedExecutions EIP712 hash
-            bytes32 bDigest = _hashTypedBatchExecutionAuthorization(mode, executionBatch, nonce);
-            //validate signature
-            require(address(this) == ECDSA.recover(bDigest, signature), LibErrors.UnauthorizedExecution());
-            // Execute the batch calls
-            _execBatch(executionBatch);
-            return;
-        } else if (modeId == 3) {
-            // For this mode, the caller must be the Delegated EOA itself (onlySelf)
-            if (msg.sender != address(this)) revert LibErrors.UnauthorizedCaller();
-            // Batch call type with Empty mode selector (0x01 + 0x00000000)
-            // In this case, executionData is expected to contain abi encoded calls only, no opData
+            if (modeId == BATCH_CALL_OPDATA_AUTH) {
+                // Perform authentication using opData and execute batch calls
+                Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(sobExecutionData);
+                // create AuthorizedExecutions EIP712 hash
+                bytes32 bDigest = _hashTypedBatchExecutionAuthorization(mode, executionBatch, nonce);
+                //validate signature
+                require(address(this) == ECDSA.recover(bDigest, signature), LibErrors.UnauthorizedExecution());
+                // Execute the batch calls
+                _execBatch(executionBatch);
+                return;
+            }
+        } else {
+            require(msg.sender == address(this), LibErrors.UnauthorizedCaller());
+            // For mode SINGLE_CALL_OPDATA_AUTH, opData is required for authorization
+            if (modeId == SINGLE_CALL_OPDATA_AUTH) revert LibErrors.UnauthorizedExecution();
+            // Evaluate modes BATCH_CALL_OPDATA_AUTH  and BATCH_CALL under no opData, self-call authorization
             Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(executionData);
             // Execute the batch calls
             _execBatch(executionBatch);
@@ -293,20 +310,6 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      */
     function isNonceUsed(uint256 nonce) public view virtual override onlyProxy returns (bool) {
         return super.isNonceUsed(nonce);
-    }
-
-    /**
-     * @inheritdoc NonceBitmap
-     */
-    function nextNonce() public view virtual override onlyProxy returns (uint256 nonce) {
-        return super.nextNonce();
-    }
-
-    /**
-     * @inheritdoc NonceBitmap
-     */
-    function nextNonceAfter(uint256 start) public view virtual override onlyProxy returns (uint256 nonce) {
-        return super.nextNonceAfter(start);
     }
 
     /**
@@ -346,25 +349,39 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     }
 
     /**
+     * @notice Returns whether the delegate contract is currently paused
+     * @dev This function checks the pause state of the KillSwitch contract. Unlike most functions,
+     *      it can be called both on the implementation contract and on delegated EOAs, as it should convey the same
+     * meaning. It signals if delegate implementation is safe to use.
+     *
+     * @return True if the contract is paused via the KillSwitch, false otherwise
+     */
+    function isPaused() external view returns (bool) {
+        return _KILLSWITCH_CONTRACT.paused();
+    }
+
+    /**
      * @notice This function is provided for frontends to detect support. It checks if the contract supports
      *         a specific execution mode.
      *
      * @dev Determines whether the contract supports the specified execution mode. Supported execution modes are
      *      detailed in the table below:
      *
-     *      +----+----------+----------+------------+-------------------+-------------+
-     *      | Id | CallType | ExecType | Unused     | ModeSelector      | ModePayload |
-     *      |    | (1 byte) | (1 byte) | (4 bytes)  | (4 bytes)         | (22 bytes)  |
-     *      +----+----------+----------+------------+-------------------+-------------+
-     *      | 1  | 0x00     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
-     *      |    | (Single) | (Revert) | (Empty)    | (Auth via opData) |             |
-     *      +----+----------+----------+------------+-------------------+-------------+
-     *      | 2  | 0x01     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
-     *      |    | (Batch)  | (Revert) | (Empty)    | (Auth via opData) |             |
-     *      +----+----------+----------+------------+-------------------+-------------+
-     *      | 3  | 0x01     | 0x00     | 0x00000000 | 0x00000000        | ANY         |
-     *      |    | (Batch)  | (Revert) | (Empty)    | (Default)         |             |
-     *      +----+----------+----------+------------+-------------------+-------------+
+     * ```
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | Mode ID          | CallType | ExecType | Unused     | ModeSelector      | ModePayload |
+     *      |                  | (1 byte) | (1 byte) | (4 bytes)  | (4 bytes)         | (22 bytes)  |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | SINGLE_CALL_     | 0x00     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
+     *      | OPDATA_AUTH  (1) | (Single) | (Revert) | (Empty)    | (Auth via opData) |             |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | BATCH_CALL_      | 0x01     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
+     *      | OPDATA_AUTH  (2) | (Batch)  | (Revert) | (Empty)    | (Auth via opData) |             |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | BATCH_CALL       | 0x01     | 0x00     | 0x00000000 | 0x00000000        | ANY         |
+     *      |              (3) | (Batch)  | (Revert) | (Empty)    | (Default)         |             |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     * ```
      *
      * @param mode The fully-qualified execution mode to check
      * @return True if the mode is supported, false otherwise
@@ -402,16 +419,13 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *         both invoking a function on target contract or for sending ETH to non-contract addresses.
      * @dev Performs a low-level call to the target contract and verifies the result.
      *
-     * Note: To prevent loss of funds, we check that target is a contract if all of the following are true:
-     * - the call was successful, AND
-     * - the return data is empty, AND
-     * - calldata was not empty, AND
-     * - there is value being sent
+     * Note: This function prevents reentrancy when the target is the Delegated EOA. Following a whitelist pattern,
+     * the only function selector allowed in this situation is the `invalidateNonce` function. If any other function,
+     * for example `execute`, is called, it will revert with a `ReentrantCall` error.
      *
      * Calling Conditions:
      *
-     * - When sending value, the target must be a contract if the call has data attached to it
-     *   and call is successful, but returns no data.
+     * - The call to perform does not constitute a reentrant call to the execute function.
      *
      * @param target The address of the contract to call
      * @param value The amount of ETH to send with the call
@@ -419,11 +433,11 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @return The returndata from the call if successful
      */
     function _call(address target, uint256 value, bytes calldata data) internal returns (bytes memory) {
-        (bool success, bytes memory returndata) = target.call{ value: value }(data);
-        // Check value safeguard measure
-        if (success && returndata.length == 0 && data.length > 0 && value > 0 && target.code.length == 0) {
-            revert Address.AddressEmptyCode(target);
+        // Reject any calls to self that are not the invalidateNonce function
+        if (target == address(this) && data.length >= 4 && bytes4(data[:4]) != this.invalidateNonce.selector) {
+            revert LibErrors.ReentrantCall();
         }
+        (bool success, bytes memory returndata) = target.call{ value: value }(data);
         return Address.verifyCallResult(success, returndata);
     }
 
@@ -448,10 +462,12 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @notice Identifies the type of execution mode
      * @dev Analyzes the execution mode and returns an identifier that indicates support:
      *      - Returns 0 if the mode is not supported
-     *      - Returns 1 for CallType = Single (0x00), ExecType = Revert on failure (0x00), Unused = EMPTY,
-     *          ModeSelector = Authorization via `opData` (0x78210001), ModePayload = ANY
-     *      - Returns 2 for supported Batch call type mode with auth (0x01 + 0x78210001)
-     *      - Returns 3 for supported Batch call type mode with default auth (0x01 + 0x00000000)
+     *      - Returns SINGLE_CALL_OPDATA_AUTH for CallType = Single (0x00), ExecType = Revert on failure (0x00),
+     *        Unused = EMPTY, ModeSelector = Authorization via **required** `opData` (0x78210001), ModePayload = ANY
+     *      - Returns BATCH_CALL_OPDATA_AUTH for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
+     *        Unused = EMPTY, ModeSelector = Authorization via optional `opData` (0x78210001), ModePayload = ANY
+     *      - Returns BATCH_CALL for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
+     *        Unused = EMPTY, ModeSelector = Default (0x00000000), ModePayload = ANY
      *
      * @param mode The execution mode to analyze
      * @return An identifier for the execution mode type (0 = unsupported)
@@ -460,13 +476,13 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
         // Check if the mode is supported. Only checks the first 10 bytes of the mode
         bytes10 execModeMinusPayload = bytes10(mode);
         if (execModeMinusPayload == bytes10(0x00000000000078210001)) {
-            return 1;
+            return SINGLE_CALL_OPDATA_AUTH;
         }
         if (execModeMinusPayload == bytes10(0x01000000000078210001)) {
-            return 2;
+            return BATCH_CALL_OPDATA_AUTH;
         }
         if (execModeMinusPayload == bytes10(0x01000000000000000000)) {
-            return 3;
+            return BATCH_CALL;
         }
         return 0;
     }
@@ -486,7 +502,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      */
     function _determineExecutionModeRevertCause(bytes32 mode) internal pure {
         // Extract the components from the mode
-        (CallType callType, ExecType execType, ModeSelector modeSelector,) = Mode.wrap(mode).decodeMode();
+        (CallType callType, ExecType execType, ModeSelector modeSelector,) = ERC7579Utils.decodeMode(Mode.wrap(mode));
 
         // Check for callType being 0x00 (Single) or 0x01 (Batch)
         if (!(callType == ERC7579Utils.CALLTYPE_SINGLE || callType == ERC7579Utils.CALLTYPE_BATCH)) {
@@ -530,9 +546,6 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
         pure
         returns (bytes calldata singleOrBatchExecutionData, bytes calldata opData)
     {
-        // Default opData to empty
-        opData = executionData[executionData.length:executionData.length];
-
         // Read the primary offset in a local variable first
         uint256 cOffset;
         assembly {
@@ -560,6 +573,10 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
                 let oPos := add(executionData.offset, oOffset)
                 opData.offset := add(oPos, 0x20)
                 opData.length := calldataload(oPos)
+            }
+        } else {
+            assembly {
+                opData.length := 0
             }
         }
     }

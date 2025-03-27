@@ -3,14 +3,11 @@ pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
-import { ERC7579Utils, CallType, ExecType, Mode } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 import { Packing } from "@openzeppelin/contracts/utils/Packing.sol";
 import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import { IERC1155Receiver } from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
-import "./mocks/MockKillSwitch.sol";
+import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 import "./mocks/UGDNonReceiverMock.sol";
 
 /**
@@ -65,11 +62,11 @@ contract UGDTokenReceiverTest is Test, UniversalGaslessDelegationHelper {
         vm.deal(userA, 10 ether);
 
         // Set up mock killswitch
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
         // Create UniversalGaslessDelegate
-        gaslessDelegate = new UniversalGaslessDelegate(mockKillswitchContract);
+        gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
         // Create non-receiver UGD mock
-        ugdNonReceiver = new UGDNonReceiverMock(mockKillswitchContract);
+        ugdNonReceiver = new UGDNonReceiverMock(address(killswitchContract));
         // Deploy mock NFT contract
         mockNFT = new MockERC721();
         // Deploy mock ERC1155 contract

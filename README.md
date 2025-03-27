@@ -1,10 +1,62 @@
 # Universal Gasless - Smart Contracts
 
-A Foundry-based template for developing Solidity smart contracts, with sensible defaults.
+A smart contract project implementing EIP-7702 for universal gasless transaction execution, enabling EOAs to have
+contract-like functionality without requiring gas.
+
+## Overview
+
+The Universal Gasless Delegate is a smart contract system that allows EOAs (Externally Owned Accounts) to delegate
+transaction execution to a contract while retaining full control of authorization. This enables users to perform gasless
+transactions and access advanced features typically only available to contract accounts.
+
+> **Important:** This contract requires deployment on networks that have activated the Pectra hardfork (and consequently
+> Dencun), as it leverages [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) (setting code for an EOA) and
+> [EIP-1153](https://eips.ethereum.org/EIPS/eip-1153) (transient storage opcodes).
+
+### Key Features
+
+- **Gasless Transactions**: Users can have their transactions commited on chain by third-parties, removing the
+  requirement to pay gas fees directly
+- **Contract-like Functionality**: EOAs gain access to contract abilities like batched transactions
+- **EIP-7702 Compatibility**: Leverages the newest Account Abstraction (Delegation) pattern
+- **EIP-7821 Support**: Implements flexible execution modes for single and batch operations
+- **Secure Signatures**: Integrates EIP-712 typed data signing for secure authorization
+- **Emergency Pause**: Includes kill switch functionality for responding to security incidents
+
+The contract is designed for EOAs to delegate their code execution to it. This pattern results in allowing calls to the
+EOA address that will trigger the code in the Delegate contract, while making sure that the authorization of operations
+remains in control of the EOA signer.
+
+## Repository Structure
+
+```
+universal-gasless-7702-contract/
+├── src/                       # Source code directory
+│   ├── UniversalGaslessDelegate.sol  # Main contract implementing EIP-7702 delegate
+│   ├── KillSwitch.sol                # Emergency pause functionality
+│   ├── interface/                    # Contract interfaces
+│   │   ├── IERC7821.sol              # Interface for EIP-7821 execution standard
+│   │   └── IKillSwitch.sol           # Interface for emergency pause control
+│   ├── library/                      # Utility libraries
+│   │   ├── LibErrors.sol             # Centralized error definitions
+│   │   └── NonceStorageStruct.sol    # Storage structure for nonces
+│   └── mixins/                       # Contract components
+│       ├── NonceBitmap.sol           # Nonce management for replay protection
+│       ├── TokenReceiver.sol         # Support for receiving ERC tokens
+│       └── TypedAuthorization.sol    # Typed data hashing for authorizations
+└── tests/                     # Test directory
+    ├── UniversalGaslessDelegate.t.sol  # Main contract tests
+    ├── UniversalGaslessDelegate.paused.t.sol  # Tests for paused state
+    ├── UniversalGaslessDelegationHelper.sol   # Helper for delegation tests
+    ├── KillSwitch.t.sol               # KillSwitch tests
+    ├── UGD.*.t.sol                    # Component-specific tests
+    └── mocks/                         # Mock contracts for testing
+```
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/docs/installation): Foundry defaults to git submodules, but this template uses Node.js packages for managing dependencies
+- [Bun](https://bun.sh/docs/installation): Foundry defaults to git submodules, but this template uses Node.js packages
+  for managing dependencies
 - [Forge](https://github.com/foundry-rs/foundry/blob/master/forge): compile, test, fuzz, format, and deploy smart
   contracts
 - [Lcov](https://github.com/linux-test-project/lcov) : On macOS, you can install it with Homebrew: `brew install lcov`.
@@ -101,6 +153,7 @@ $ forge coverage
 Deploy to Anvil:
 
 Open a new terminal and run Anvil:
+
 ```
 $ anvil
 ```
@@ -168,6 +221,13 @@ $ bun run test:coverage:report
 
 ## Related Efforts
 
-## License
+## Licenses
 
-This project is licensed by Fireblocks under AGPL.
+This project is primarily licensed by Fireblocks under AGPLv3.
+
+The following components are included under MIT license:
+
+- `IERC7821.sol` from [Zeppelin Group Ltd](https://github.com/OpenZeppelin/openzeppelin-community-contracts) - Interface
+  for the EIP-7821 minimal batch executor standard
+
+For full license texts, see the `./licenses` directory.

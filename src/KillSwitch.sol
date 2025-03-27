@@ -4,7 +4,6 @@ pragma solidity 0.8.27;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
-import { LibErrors } from "./library/LibErrors.sol";
 import { IKillSwitch } from "./interface/IKillSwitch.sol";
 
 /**
@@ -71,34 +70,5 @@ contract KillSwitch is IKillSwitch, Ownable, Pausable {
      */
     function paused() public view virtual override(IKillSwitch, Pausable) returns (bool) {
         return super.paused();
-    }
-
-    /**
-     * @notice This function is used to create a one way kill switch behaviour, where the owner can only
-     *         renounce ownership and not transfer ownership to another address. To achieve a one way kill switch,
-     *         the {renounceOwnership} function can only be called when the contract is paused.
-     * @dev Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be
-     * called by the current owner.
-     *
-     * Calling Conditions:
-     *   - The caller must be the owner of the contract (checked in Ownable)
-     *   - The contract must be paused
-     *
-     * It cannot be called when the contract is not paused, because it would render the kill switch useless.
-     *
-     * NOTE: Renouncing ownership will leave the contract without an owner,
-     * thereby disabling any functionality that is only available to the owner.
-     */
-    function renounceOwnership() public virtual override whenPaused {
-        super.renounceOwnership();
-    }
-
-    /**
-     * @notice This function invalidates the option of transferring ownership of the contract.
-     *         The owner is meant to be a safeguarged account, so only renouncing ownership is allowed.
-     * @dev Always reverts.
-     */
-    function transferOwnership(address) public virtual override {
-        revert LibErrors.FunctionDisabled();
     }
 }

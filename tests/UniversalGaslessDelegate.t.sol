@@ -20,7 +20,7 @@ import { IERC7821 } from "../src/interface/IERC7821.sol";
 contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper {
     // NOTE: Inherits the relevant variable(s) from the helper contract:
     // - UniversalGaslessDelegate gaslessDelegate;
-    // - address mockKillswitchContract;
+    // - IKillSwitch killswitchContract;
 
     address public userA;
     uint256 private userAPrivateKey;
@@ -35,27 +35,24 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.deal(userA, 10 ether);
 
         // Set up mock killswitch in unpaused state
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
 
         // Set up a paused mock killswitch
         pausedMockKillswitchContract = address(new MockKillSwitch());
         MockKillSwitch(pausedMockKillswitchContract).pause();
 
         // Create UniversalGaslessDelegate with unpaused killswitch
-        gaslessDelegate = new UniversalGaslessDelegate(mockKillswitchContract);
+        gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
         // Set up delegation for userA to gaslessDelegate
         delegatedAccount =
             UniversalGaslessDelegate(payable(setupDelegation(userA, userAPrivateKey, address(gaslessDelegate))));
         assertEq(address(delegatedAccount), userA, "Delegated account should be the same as the user account");
     }
 
-    function test_constructsCorrectly() public view {
-        // Test that the killswitch contract address has been set correctly
-        assertEq(
-            address(gaslessDelegate.killswitchContract()),
-            mockKillswitchContract,
-            "Killswitch contract address should be set correctly"
-        );
+    function test_constructsCorrectly() public {
+        // Test that the constructor checks the killswitch's paused state
+        vm.expectCall(address(killswitchContract), abi.encodeWithSignature("paused()"));
+        new UniversalGaslessDelegate(address(killswitchContract));
     }
 
     function test_RevertWhen_ConstructingWithPausedKillswitch() public {
@@ -227,6 +224,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
         // Step 3: Create the final struct hash including the mode and nonce
         bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
@@ -237,7 +235,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Encode opData (nonce + signature)
-        bytes memory opData = abi.encodePacked(abi.encode(nonce), signature);
+        bytes memory opData = abi.encodePacked(nonce, signature);
 
         // Encode executionData
         bytes memory singleExecData = abi.encodePacked(target, value, callData); // as per EIP-7579
@@ -266,33 +264,6 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Verify the mock contract received the correct data and returned the expected value
         assertEq(mockTarget.storedValue(), value, "Target should have recorded the value");
         assertEq(mockTarget.lastData(), callData, "Target should have received the correct calldata");
-    }
-
-    function test_RevertWhen_DirectlyCallingReceiveOnImplementation() public {
-        // Record the initial balance
-        uint256 initialBalance = address(gaslessDelegate).balance;
-
-        // Try to send ETH directly to the implementation contract (should fail)
-        (bool success,) = address(gaslessDelegate).call{ value: 1 ether }("");
-
-        assertFalse(success, "Direct ETH transfer to implementation should fail");
-        assertEq(
-            address(gaslessDelegate).balance, initialBalance, "Implementation contract balance should remain unchanged"
-        );
-    }
-
-    function test_RevertWhen_DirectlyCallingFallbackOnImplementation() public {
-        // Record the initial balance
-        uint256 initialBalance = address(gaslessDelegate).balance;
-
-        // Try to send ETH with data directly to the implementation contract (should fail)
-        bytes memory arbitraryData = abi.encode("This should fail");
-        (bool success,) = address(gaslessDelegate).call{ value: 1 ether }(arbitraryData);
-
-        assertFalse(success, "Direct ETH transfer with data to implementation should fail");
-        assertEq(
-            address(gaslessDelegate).balance, initialBalance, "Implementation contract balance should remain unchanged"
-        );
     }
 
     function test_execute_withValidSignature_batchMode() public {
@@ -336,12 +307,14 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
         bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
         for (uint256 i = 0; i < executionBatch.length; i++) {
-            executionHashes[i] = keccak256(abi.encode(
-                executionTypehash,
-                executionBatch[i].target,
-                executionBatch[i].value,
-                keccak256(executionBatch[i].callData)
-            ));
+            executionHashes[i] = keccak256(
+                abi.encode(
+                    executionTypehash,
+                    executionBatch[i].target,
+                    executionBatch[i].value,
+                    keccak256(executionBatch[i].callData)
+                )
+            );
         }
         // Step 2: Create the batch hash
         bytes memory encodedHashes = "";
@@ -351,6 +324,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 executionsHash = keccak256(encodedHashes);
         // Step 3: Create the final struct hash including the mode and nonce
         bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
@@ -361,7 +335,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Encode opData (nonce + signature)
-        bytes memory opData = abi.encodePacked(abi.encode(nonce), signature);
+        bytes memory opData = abi.encodePacked(nonce, signature);
 
         // Encode batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
@@ -377,13 +351,13 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Execute the transaction
         vm.startPrank(address(0xdead)); // Use any address as the caller
-        
+
         // Expect events for both calls
         vm.expectEmit(true, true, true, true, address(mockTarget1));
         emit MockCallTarget.Called(userA, value1, callData1);
         vm.expectEmit(true, true, true, true, address(mockTarget2));
         emit MockCallTarget.Called(userA, value2, callData2);
-        
+
         delegatedAccount.execute(mode, executionData);
         vm.stopPrank();
 
@@ -391,13 +365,72 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         assertEq(address(mockTarget1).balance, initialTarget1Balance + value1, "Target1 should have received ETH");
         assertEq(address(mockTarget2).balance, initialTarget2Balance + value2, "Target2 should have received ETH");
         assertEq(
-            address(delegatedAccount).balance, 
-            initialDelegatedBalance - value1 - value2, 
+            address(delegatedAccount).balance,
+            initialDelegatedBalance - value1 - value2,
             "Delegated EOA should have sent total ETH"
         );
-        
+
         // Verify the nonce was marked as used
         assertTrue(delegatedAccount.isNonceUsed(nonce), "Nonce should be marked as used");
+    }
+
+    function test_execute_withoutOpData_78210001Selector_batchMode() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Deploy multiple mock target contracts to call
+        MockCallTarget mockTarget1 = new MockCallTarget();
+        MockCallTarget mockTarget2 = new MockCallTarget();
+        vm.deal(address(mockTarget1), 0);
+        vm.deal(address(mockTarget2), 0);
+
+        // Set up execution parameters for first call
+        address target1 = address(mockTarget1);
+        uint256 value1 = 0.05 ether;
+        bytes memory callData1 = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 42);
+        // Set up execution parameters for second call
+        address target2 = address(mockTarget2);
+        uint256 value2 = 0.03 ether;
+        bytes memory callData2 = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 24);
+        // Construct the execution mode - Batch call type with Auth (Mode ID = 2)
+        // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = 0
+        bytes32 mode = bytes32(0x0100000000007821000100000000000000000000000000000000000000000000);
+        // Create execution batch array
+        Execution[] memory executionBatch = new Execution[](2);
+        executionBatch[0] = Execution(target1, value1, callData1);
+        executionBatch[1] = Execution(target2, value2, callData2);
+
+        // Encode batch execution data - no opData for this mode
+        bytes memory executionData = ERC7579Utils.encodeBatch(executionBatch);
+
+        // Fund the delegated user
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Check initial balances
+        uint256 initialTarget1Balance = address(mockTarget1).balance;
+        uint256 initialTarget2Balance = address(mockTarget2).balance;
+        uint256 initialDelegatedBalance = address(delegatedAccount).balance;
+
+        // Execute the transaction - must be called by the delegated EOA itself
+        vm.startPrank(address(delegatedAccount)); // Must be called by the delegated EOA itself
+
+        // Expect events for both calls
+        vm.expectEmit(true, true, true, true, address(mockTarget1));
+        emit MockCallTarget.Called(userA, value1, callData1);
+        vm.expectEmit(true, true, true, true, address(mockTarget2));
+        emit MockCallTarget.Called(userA, value2, callData2);
+
+        delegatedAccount.execute(mode, executionData);
+        vm.stopPrank();
+
+        // Verify the correct state changes
+        assertEq(address(mockTarget1).balance, initialTarget1Balance + value1, "Target1 should have received ETH");
+        assertEq(address(mockTarget2).balance, initialTarget2Balance + value2, "Target2 should have received ETH");
+        assertEq(
+            address(delegatedAccount).balance,
+            initialDelegatedBalance - value1 - value2,
+            "Delegated EOA should have sent total ETH"
+        );
     }
 
     function test_execute_selfCall_batchMode() public {
@@ -440,13 +473,13 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Execute the transaction - must be called by the delegated EOA itself
         vm.startPrank(address(delegatedAccount)); // Must be called by the delegated EOA itself
-        
+
         // Expect events for both calls
         vm.expectEmit(true, true, true, true, address(mockTarget1));
         emit MockCallTarget.Called(userA, value1, callData1);
         vm.expectEmit(true, true, true, true, address(mockTarget2));
         emit MockCallTarget.Called(userA, value2, callData2);
-        
+
         delegatedAccount.execute(mode, executionData);
         vm.stopPrank();
 
@@ -454,12 +487,39 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         assertEq(address(mockTarget1).balance, initialTarget1Balance + value1, "Target1 should have received ETH");
         assertEq(address(mockTarget2).balance, initialTarget2Balance + value2, "Target2 should have received ETH");
         assertEq(
-            address(delegatedAccount).balance, 
-            initialDelegatedBalance - value1 - value2, 
+            address(delegatedAccount).balance,
+            initialDelegatedBalance - value1 - value2,
             "Delegated EOA should have sent total ETH"
         );
     }
-    
+
+    function test_RevertWhen_DirectlyCallingReceiveOnImplementation() public {
+        // Record the initial balance
+        uint256 initialBalance = address(gaslessDelegate).balance;
+
+        // Try to send ETH directly to the implementation contract (should fail)
+        (bool success,) = address(gaslessDelegate).call{ value: 1 ether }("");
+
+        assertFalse(success, "Direct ETH transfer to implementation should fail");
+        assertEq(
+            address(gaslessDelegate).balance, initialBalance, "Implementation contract balance should remain unchanged"
+        );
+    }
+
+    function test_RevertWhen_DirectlyCallingFallbackOnImplementation() public {
+        // Record the initial balance
+        uint256 initialBalance = address(gaslessDelegate).balance;
+
+        // Try to send ETH with data directly to the implementation contract (should fail)
+        bytes memory arbitraryData = abi.encode("This should fail");
+        (bool success,) = address(gaslessDelegate).call{ value: 1 ether }(arbitraryData);
+
+        assertFalse(success, "Direct ETH transfer with data to implementation should fail");
+        assertEq(
+            address(gaslessDelegate).balance, initialBalance, "Implementation contract balance should remain unchanged"
+        );
+    }
+
     function test_RevertWhen_DirectlyCallingExecuteOnImplementation() public {
         // Construct the execution mode
         bytes32 mode = bytes32(hex"00000000000078210001");
@@ -520,6 +580,74 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         delegatedAccount.execute(unsupportedMode, executionData);
     }
 
+    function test_RevertWhen_ExecuteSingleCallWithoutOpData_FromSelf() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Deploy mock target contract
+        MockCallTarget mockTarget = new MockCallTarget();
+        vm.deal(address(mockTarget), 0);
+
+        // Set up execution parameters
+        address target = address(mockTarget);
+        uint256 value = 0.1 ether;
+        bytes memory callData = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 42);
+
+        // Construct the execution mode - Single call type with Auth (Mode ID = 1)
+        // CallType = (0x00), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = 0
+        bytes32 mode = bytes32(0x0000000000007821000100000000000000000000000000000000000000000000);
+
+        // Encode single execution data (no opData)
+        bytes memory singleExecData = abi.encode(abi.encodePacked(target, value, callData), "");
+
+        // Fund the delegated user
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Try executing from the delegated EOA itself, which should still revert
+        // since SINGLE_CALL_OPDATA_AUTH requires opData regardless of caller
+        vm.startPrank(address(delegatedAccount));
+
+        // when called without opData even from the delegated EOA...
+        // because our only single mode is not standard and requires opData => it reverts with UnauthorizedExecution
+        vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
+        delegatedAccount.execute(mode, singleExecData);
+
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_ExecuteSingleCallWithoutOpData_FromUnauthorizedCaller() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Deploy mock target contract
+        MockCallTarget mockTarget = new MockCallTarget();
+        vm.deal(address(mockTarget), 0);
+
+        // Set up execution parameters
+        address target = address(mockTarget);
+        uint256 value = 0.1 ether;
+        bytes memory callData = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 42);
+
+        // Construct the execution mode - Single call type with Auth (Mode ID = 1)
+        // CallType = (0x00), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = 0
+        bytes32 mode = bytes32(0x0000000000007821000100000000000000000000000000000000000000000000);
+
+        // Encode single execution data (no opData)
+        bytes memory singleExecData = abi.encode(abi.encodePacked(target, value, callData), "");
+
+        // Fund the delegated user
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Execute from an unauthorized address
+        vm.startPrank(address(0xdead));
+
+        // It should revert with UnauthorizedCaller error when called from third party EOA
+        vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
+        delegatedAccount.execute(mode, singleExecData);
+
+        vm.stopPrank();
+    }
+
     function test_RevertWhen_ExecuteWithInvalidSignature_SingleMode() public {
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));
@@ -548,6 +676,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
         // Step 3: Create the final struct hash including the mode and nonce
         bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
@@ -556,14 +685,14 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
         // Step 5: Create the final digest
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        
+
         // Sign with a DIFFERENT private key than the delegated EOA's
-        ( , uint256 wrongPrivateKey ) = makeAddrAndKey("wrongSigner");
+        (, uint256 wrongPrivateKey) = makeAddrAndKey("wrongSigner");
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(wrongPrivateKey, digest);
         bytes memory invalidSignature = abi.encodePacked(r, s, v);
 
         // Encode opData with invalid signature
-        bytes memory opData = abi.encodePacked(abi.encode(nonce), invalidSignature);
+        bytes memory opData = abi.encodePacked(nonce, invalidSignature);
 
         // Encode executionData for single call
         bytes memory singleExecData = abi.encodePacked(target, value, callData);
@@ -574,15 +703,15 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Execute the transaction with invalid signature should revert
         vm.startPrank(address(0xdead));
-        
+
         // The exact revert error will depend on how _isValidRawSignature is used
         // This would typically be a signature validation error
         vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
         delegatedAccount.execute(mode, executionData);
-        
+
         vm.stopPrank();
     }
-    
+
     function test_RevertWhen_ExecuteWithInvalidSignature_BatchMode() public {
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));
@@ -617,12 +746,14 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
         bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
         for (uint256 i = 0; i < executionBatch.length; i++) {
-            executionHashes[i] = keccak256(abi.encode(
-                executionTypehash,
-                executionBatch[i].target,
-                executionBatch[i].value,
-                keccak256(executionBatch[i].callData)
-            ));
+            executionHashes[i] = keccak256(
+                abi.encode(
+                    executionTypehash,
+                    executionBatch[i].target,
+                    executionBatch[i].value,
+                    keccak256(executionBatch[i].callData)
+                )
+            );
         }
         // Step 2: Create the batch hash
         bytes memory encodedHashes = "";
@@ -632,6 +763,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 executionsHash = keccak256(encodedHashes);
         // Step 3: Create the final struct hash
         bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
@@ -640,14 +772,14 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
         // Step 5: Create the final digest
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        
+
         // Tamper with the digest to create an invalid signature
         bytes32 tamperedDigest = keccak256(abi.encodePacked(digest, "tamper"));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, tamperedDigest);
         bytes memory invalidSignature = abi.encodePacked(r, s, v);
 
         // Encode opData with invalid signature
-        bytes memory opData = abi.encodePacked(abi.encode(nonce), invalidSignature);
+        bytes memory opData = abi.encodePacked(nonce, invalidSignature);
 
         // Encode batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
@@ -661,10 +793,10 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
         delegatedAccount.execute(mode, executionData);
-        
+
         vm.stopPrank();
     }
-    
+
     function test_RevertWhen_ExecuteSelfCallBatchModeFromUnauthorizedCaller() public {
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));
@@ -676,20 +808,57 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Create dummy batch execution
         Execution[] memory executionBatch = new Execution[](1);
         executionBatch[0] = Execution(address(0x1234), 0.1 ether, "");
-        
+
         // Encode batch execution data - no opData for this mode
         bytes memory executionData = ERC7579Utils.encodeBatch(executionBatch);
 
         // Call from a different address (not the delegated EOA itself)
         vm.startPrank(address(0xdead));
-        
+
         // Execution should revert with UnauthorizedCaller error
         vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
         delegatedAccount.execute(mode, executionData);
-        
+
         vm.stopPrank();
     }
-    
+
+    function test_RevertWhen_ExecuteWithoutOpData_78210001Selector_batchMode_FromUnauthorizedCaller() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Deploy mock target contract
+        MockCallTarget mockTarget = new MockCallTarget();
+        vm.deal(address(mockTarget), 0);
+
+        // Set up execution parameters
+        address target = address(mockTarget);
+        uint256 value = 0.1 ether;
+        bytes memory callData = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 42);
+
+        // Construct the execution mode - Batch call type with Auth (Mode ID = 2)
+        // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = 0
+        bytes32 mode = bytes32(0x0100000000007821000100000000000000000000000000000000000000000000);
+
+        // Create execution batch array with a single call
+        Execution[] memory executionBatch = new Execution[](1);
+        executionBatch[0] = Execution(target, value, callData);
+
+        // Encode batch execution data - no opData
+        bytes memory executionData = ERC7579Utils.encodeBatch(executionBatch);
+
+        // Fund the delegated user
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Execute the transaction from an unauthorized address without opData
+        vm.startPrank(address(0xdead)); // Use unauthorized address as the caller
+
+        // It should revert with UnauthorizedCaller error when called without opData from third party
+        vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
+        delegatedAccount.execute(mode, executionData);
+
+        vm.stopPrank();
+    }
+
     function test_RevertWhen_ExecuteWithUnsupportedModeLikeSingleSelfCall() public {
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));
@@ -704,5 +873,172 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Execution should revert with UnsupportedModeSelector error
         vm.expectRevert(LibErrors.UnsupportedExecutionMode.selector);
         delegatedAccount.execute(unsupportedMode, executionData);
+    }
+
+    function test_RevertWhen_ReentrantCallAttemptInSelfCall() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Set up batch mode for self-call (outer execution)
+        // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x00000000), ModePayload = 0
+        bytes32 mode = bytes32(0x0100000000000000000000000000000000000000000000000000000000000000);
+
+        // Create a target batch execution for the inner call (will send 0.01 ETH to a random address)
+        Execution[] memory innerExecutionBatch = new Execution[](1);
+        innerExecutionBatch[0] = Execution(address(0x1234), 0.01 ether, "");
+        bytes memory innerExecutionData = ERC7579Utils.encodeBatch(innerExecutionBatch);
+
+        // Create the outer batch with one call to execute on the same delegated account
+        Execution[] memory outerExecutionBatch = new Execution[](1);
+        outerExecutionBatch[0] = Execution(
+            address(delegatedAccount),
+            0,
+            abi.encodeWithSelector(UniversalGaslessDelegate.execute.selector, mode, innerExecutionData)
+        );
+
+        // Encode outer batch execution data
+        bytes memory outerExecutionData = ERC7579Utils.encodeBatch(outerExecutionBatch);
+
+        // Fund the delegated account for the test
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Execute the transaction from the delegated EOA itself
+        vm.startPrank(address(delegatedAccount));
+
+        // This should revert with a reentrancy error
+        vm.expectRevert(LibErrors.ReentrantCall.selector);
+        delegatedAccount.execute(mode, outerExecutionData);
+
+        vm.stopPrank();
+    }
+
+    function test_execute_invalidateNonce_withValidSignature() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Set up batch mode with auth (Mode ID = 2)
+        // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x78210001), ModePayload = 0
+        bytes32 mode = bytes32(0x0100000000007821000100000000000000000000000000000000000000000000);
+
+        // Choose a future nonce that will be invalidated
+        uint256 futureNonce = 2000;
+
+        // Create batch execution with a call to invalidateNonce
+        Execution[] memory executionBatch = new Execution[](2);
+
+        // First call: invalidate a future nonce
+        executionBatch[0] = Execution(
+            address(delegatedAccount),
+            0,
+            abi.encodeWithSelector(UniversalGaslessDelegate.invalidateNonce.selector, futureNonce)
+        );
+
+        // Second call: a simple ETH transfer to verify execution continues
+        executionBatch[1] = Execution(address(0x1234), 0.01 ether, "");
+
+        // Set up a nonce for the operation
+        uint256 batchNonce = 1234;
+
+        // Calculate required signature
+        bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
+        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
+        bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
+
+        bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
+        for (uint256 i = 0; i < executionBatch.length; i++) {
+            executionHashes[i] = keccak256(
+                abi.encode(
+                    executionTypehash,
+                    executionBatch[i].target,
+                    executionBatch[i].value,
+                    keccak256(executionBatch[i].callData)
+                )
+            );
+        }
+
+        bytes memory encodedHashes = "";
+        for (uint256 i = 0; i < executionHashes.length; i++) {
+            encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
+        }
+        bytes32 executionsHash = keccak256(encodedHashes);
+
+        bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
+            "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+        );
+        bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, batchNonce));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Encode opData (nonce + signature)
+        bytes memory opData = abi.encodePacked(batchNonce, signature);
+
+        // Encode batch execution data
+        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
+        bytes memory executionData = abi.encode(batchExecData, opData);
+
+        // Fund the delegated account for the test
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Check initial balances
+        uint256 initialReceiverBalance = address(0x1234).balance;
+        uint256 initialDelegatedBalance = address(delegatedAccount).balance;
+
+        // Verify initial nonce states
+        assertFalse(delegatedAccount.isNonceUsed(batchNonce), "Execution nonce should not be used initially");
+        assertFalse(delegatedAccount.isNonceUsed(futureNonce), "Future nonce should not be used initially");
+
+        // Execute the transaction from any address (since we have valid signature)
+        vm.startPrank(address(0xdead));
+        delegatedAccount.execute(mode, executionData);
+        vm.stopPrank();
+
+        // Verify post-execution state
+        assertTrue(delegatedAccount.isNonceUsed(batchNonce), "Execution nonce should be used after execution");
+        assertTrue(delegatedAccount.isNonceUsed(futureNonce), "Future nonce should be invalidated by the call");
+
+        // Verify balance changes
+        assertEq(address(0x1234).balance, initialReceiverBalance + 0.01 ether, "Receiver did not receive 0.01 ETH");
+        assertEq(
+            address(delegatedAccount).balance,
+            initialDelegatedBalance - 0.01 ether,
+            "Delegated account balance should have decreased by 0.01 ETH"
+        );
+    }
+
+    /**
+     * @notice Test that isPaused returns false when the delegate is not paused
+     */
+    function test_IsPausedReturnsFalse() public view {
+        // Verify that the killswitch is not paused
+        assertFalse(killswitchContract.paused(), "Killswitch should not be paused for this test");
+        // Verify that isPaused also returns false for the implementation
+        assertFalse(gaslessDelegate.isPaused(), "isPaused should return false for the implementation contract");
+
+        // Verify that isPaused returns false for the delegated account
+        assertFalse(delegatedAccount.isPaused(), "isPaused should return false when killswitch is not paused");
+    }
+
+    /**
+     * @notice Test that isPaused can be called directly on the implementation contract
+     */
+    function test_IsPausedCalledOnImplementation() public {
+        // Pause the killswitch for this test
+        killswitchContract.pause();
+
+        // Verify that isPaused returns true when called directly on the implementation
+        assertTrue(
+            gaslessDelegate.isPaused(), "isPaused should return true on implementation when killswitch is paused"
+        );
+
+        // Unpause the killswitch
+        killswitchContract.unpause();
+
+        // Verify that isPaused returns false when called directly on the implementation
+        assertFalse(
+            gaslessDelegate.isPaused(), "isPaused should return false on implementation when killswitch is not paused"
+        );
     }
 }

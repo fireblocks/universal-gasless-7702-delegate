@@ -1,10 +1,10 @@
 {
-  "name": "@prb/foundry-template",
-  "description": "Foundry-based template for developing Solidity smart contracts",
+  "name": "@fireblocks/universal-gasless-7702-contract",
+  "description": "A smart contract project levearaging EIP-7702 for universal gasless transactions",
   "version": "1.0.0",
   "author": {
-    "name": "Paul Razvan Berg",
-    "url": "https://github.com/PaulRBerg"
+    "name": "Fireblocks",
+    "url": "https://www.fireblocks.com/platforms/wallets-as-a-service/"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.2.0"
@@ -32,9 +32,9 @@
     "prettier:check": "prettier --check \"**/*.{json,md,yml}\" --ignore-path \".prettierignore\"",
     "prettier:write": "prettier --write \"**/*.{json,md,yml}\" --ignore-path \".prettierignore\"",
     "flatten:ugd": "forge flatten src/UniversalGaslessDelegate.sol --output src/flattened/UniversalGaslessDelegate.flat.sol",
-    "test": "forge test",
-    "test:coverage": "EX_PATTERN=$(awk '{ printf \"|%s\", $0 }' lcovreport.exclude) && forge coverage --ir-minimum --no-match-coverage \"(tests|mock|forge-std|script${EX_PATTERN})\" --include-libs",
-    "test:coverage:all-libs": "forge coverage --ir-minimum --no-match-coverage \"(tests|mock|forge-std|script)\" --include-libs",
+    "test": "forge test --no-match-test \"(test_gas|testFork)\"",
+    "test:coverage": "EX_PATTERN=$(awk '{ printf \"|%s\", $0 }' lcovreport.exclude) && forge coverage --ir-minimum --no-match-coverage \"(tests|mock|forge-std|script${EX_PATTERN})\" --no-match-test \"(test_gas|testFork)\" --include-libs",
+    "test:coverage:all-libs": "forge coverage --ir-minimum --no-match-coverage \"(tests|mock|forge-std|script)\" --no-match-test \"(test_gas|testFork)\" --include-libs",
     "test:coverage:report": "sh coverage-report.sh"
   }
 }

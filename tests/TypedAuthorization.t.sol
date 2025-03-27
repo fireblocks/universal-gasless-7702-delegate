@@ -109,6 +109,7 @@ contract TypedAuthorizationTest is Test {
     bytes32 private constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
     bytes32 private constant EXECUTION_TYPEHASH = keccak256("Execution(address target,uint256 value,bytes data)");
     bytes32 private constant EXECUTION_AUTHORIZATION_TYPEHASH = keccak256(
+        // solhint-disable-next-line max-line-length
         "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
     );
 
@@ -150,7 +151,7 @@ contract TypedAuthorizationTest is Test {
         bytes32 newDomainSeparator = harness.exposed_domainSeparatorV4();
 
         // Verify that the domain separator changes when the chain ID changes
-        assertTrue(initialDomainSeparator != newDomainSeparator, "Domain separator should change when chain ID changes");
+        assertTrue(initialDomainSeparator != newDomainSeparator, "Domain separator should change if chain ID changes");
 
         // Calculate the expected domain separator for the new chain ID
         bytes32 expectedDomainSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, newChainId, address(harness)));
@@ -178,7 +179,7 @@ contract TypedAuthorizationTest is Test {
 
         // Verify the returned values
         // fields_binary= (0) salt, (1) chainId, (1) verifyingContract, (0) version, (0) name
-        assertEq(fields, hex"0c", "Fields should be 0c (01100)"); 
+        assertEq(fields, hex"0c", "Fields should be 0c (01100)");
         assertEq(name, "", "Name should be empty");
         assertEq(version, "", "Version should be empty");
         assertEq(chainId, block.chainid, "ChainId should match current chain");

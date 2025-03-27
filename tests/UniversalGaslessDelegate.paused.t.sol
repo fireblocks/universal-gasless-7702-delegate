@@ -16,6 +16,7 @@ contract UniversalGaslessDelegatePausedTest is Test, UniversalGaslessDelegationH
     // Test-specific variables
     address public userA;
     uint256 private userAPrivateKey;
+    UniversalGaslessDelegate private delegatedAccount;
 
     function setUp() public {
         // Set up a user with private key
@@ -23,20 +24,24 @@ contract UniversalGaslessDelegatePausedTest is Test, UniversalGaslessDelegationH
         vm.deal(userA, 10 ether);
 
         // Set up a standard killswitch for the helper
-        mockKillswitchContract = address(new MockKillSwitch());
+        killswitchContract = new MockKillSwitch();
 
         // Create standard UniversalGaslessDelegate (needed for the helper)
-        gaslessDelegate = new UniversalGaslessDelegate(mockKillswitchContract);
+        gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
 
         // Pause killswitch specifically for this set of tests
-        IKillSwitch(mockKillswitchContract).pause();
+        killswitchContract.pause();
+
+        // Set up delegation for userA to gaslessDelegate
+        delegatedAccount =
+            UniversalGaslessDelegate(payable(setupDelegation(userA, userAPrivateKey, address(gaslessDelegate))));
     }
 
     // =============================================================
     //                   NEGATIVE TEST CASES
     // =============================================================
 
-    // 
+    //
     /**
      * TODO Turn this into an invariant test as now it is possible to call invalidateNonce while paused, but only
      * from the EOA directly (tx.origin)
@@ -46,7 +51,7 @@ contract UniversalGaslessDelegatePausedTest is Test, UniversalGaslessDelegationH
     //     address payable delegatedUser = payable(setupDelegation(userA, userAPrivateKey, address(gaslessDelegate)));
     //     // Verify the account is properly delegated
     //     assertDelegated(userA, address(gaslessDelegate));
-    //     assertTrue(MockKillSwitch(mockKillswitchContract).paused(), "Killswitch should be paused for this test");
+    //     assertTrue(killswitchContract.paused(), "Killswitch should be paused for this test");
     //     uint256 nonce = 1; // Using an arbitrary nonce value
 
     //     // Attempt to call invalidateNonce through the delegated user
@@ -65,49 +70,43 @@ contract UniversalGaslessDelegatePausedTest is Test, UniversalGaslessDelegationH
 
     // TODO: Also assert that the Delegated EOA also reports isPaused() == true
     function test_canReceiveEtherWhilePaused() public {
-        // Set up delegation for userA
-        address delegatedUser = setupDelegation(userA, userAPrivateKey, address(gaslessDelegate));
-
         // First verify the account is properly delegated
-        assertDelegated(delegatedUser, address(gaslessDelegate));
+        assertDelegated(userA, address(gaslessDelegate));
         // Verify the killswitch is actually paused
-        assertTrue(MockKillSwitch(mockKillswitchContract).paused(), "Killswitch should be paused for this test");
+        assertTrue(killswitchContract.paused(), "Killswitch should be paused for this test");
 
         // Send ETH directly to the delegated account
         uint256 sendAmount = 1 ether;
-        uint256 balanceBefore = address(delegatedUser).balance;
+        uint256 balanceBefore = address(userA).balance;
 
-        (bool success,) = delegatedUser.call{ value: sendAmount }("");
+        (bool success,) = userA.call{ value: sendAmount }("");
 
         assertTrue(success, "ETH transfer should succeed even when killswitch is paused");
         assertEq(
-            address(delegatedUser).balance,
+            address(userA).balance,
             balanceBefore + sendAmount,
             "Delegated account should receive the ETH even when paused"
         );
     }
 
     function test_canReceiveEtherWithDataWhilePaused() public {
-        // Set up delegation for userA
-        address delegatedUser = setupDelegation(userA, userAPrivateKey, address(gaslessDelegate));
-
         // First verify the account is properly delegated
-        assertDelegated(delegatedUser, address(gaslessDelegate));
+        assertDelegated(userA, address(gaslessDelegate));
         // Verify the killswitch is actually paused
-        assertTrue(MockKillSwitch(mockKillswitchContract).paused(), "Killswitch should be paused for this test");
+        assertTrue(killswitchContract.paused(), "Killswitch should be paused for this test");
 
         // Send ETH with arbitrary data to trigger the fallback function
         uint256 sendAmount = 1 ether;
-        uint256 balanceBefore = address(delegatedUser).balance;
+        uint256 balanceBefore = address(userA).balance;
 
         // Create arbitrary calldata (simulating "memo" or confused interface call)
         bytes memory arbitraryData = abi.encode("This is a memo for the transaction");
 
-        (bool success,) = delegatedUser.call{ value: sendAmount }(arbitraryData);
+        (bool success,) = userA.call{ value: sendAmount }(arbitraryData);
 
         assertTrue(success, "ETH transfer with data should succeed even when killswitch is paused");
         assertEq(
-            address(delegatedUser).balance,
+            address(userA).balance,
             balanceBefore + sendAmount,
             "Delegated account should receive the ETH via fallback even when paused"
         );
@@ -117,21 +116,34 @@ contract UniversalGaslessDelegatePausedTest is Test, UniversalGaslessDelegationH
      * @notice Test that execute function reverts when the delegate is paused
      */
     function test_RevertWhen_ExecuteWhilePaused() public {
-        // Set up delegation for userA to gaslessDelegate
-        UniversalGaslessDelegate delegatedAccount = 
-            UniversalGaslessDelegate(payable(setupDelegation(userA, userAPrivateKey, address(gaslessDelegate))));
-
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));
         // Verify the killswitch is actually paused
-        assertTrue(MockKillSwitch(mockKillswitchContract).paused(), "Killswitch should be paused for this test");
+        assertTrue(killswitchContract.paused(), "Killswitch should be paused for this test");
 
         // Set up execution parameters - using a simple mode and empty execution data
-        bytes32 mode = bytes32(uint256(0x00000000000078210001) << 22 * 8); 
+        bytes32 mode = bytes32(uint256(0x00000000000078210001) << 22 * 8);
         bytes memory executionData = abi.encode(bytes("dummy data"));
-        
+
         // Call should revert with EnforcedPause
         vm.expectRevert(LibErrors.EnforcedPause.selector);
         delegatedAccount.execute(mode, executionData);
+    }
+
+    /**
+     * @notice Test that isPaused returns true when the delegate is paused
+     */
+    function test_IsPausedReturnsTrue() public view {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Verify that killswitch is actually paused
+        assertTrue(killswitchContract.paused(), "Killswitch should be paused for this test");
+
+        // Verify that isPaused returns true for the delegated account
+        assertTrue(delegatedAccount.isPaused(), "isPaused should return true when killswitch is paused");
+
+        // Verify that isPaused also returns true for the implementation
+        assertTrue(gaslessDelegate.isPaused(), "isPaused should return true for the implementation contract");
     }
 }
