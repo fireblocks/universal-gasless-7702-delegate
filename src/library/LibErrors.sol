@@ -52,6 +52,13 @@ library LibErrors {
     error ExecutionDataExtractionError();
 
     /**
+     * @notice This error indicates that a call to the `execute` function on the same Delegate EOA was attempted, from
+     * the context of a running `execute` function. This would indicate a reentrant call, and therefore is blocked.
+     * @dev Thrown when a reentrant call is detected.
+     */
+    error ReentrantCall();
+
+    /**
      * @notice This error indicates that the function caller is not the expected. For example, not the EOA itself.
      * @dev Indicates that the function caller is not the expected address.
      */
@@ -111,13 +118,6 @@ library LibErrors {
      * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/Pausable.sol
      */
     error EnforcedPause();
-
-    /**
-     * @notice This error indicates that a call to the `execute` function on the same Delegate EOA was attempted, from
-     * the context of a running `execute` function. This would indicate a reentrant call, and therefore is blocked.
-     * @dev Thrown when a reentrant call is detected.
-     */
-    error ReentrantCall();
 
     /**
      * @notice This error indicates that an ERC7579 execute "call type" is not supported.

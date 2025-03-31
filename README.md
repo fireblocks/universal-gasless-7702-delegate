@@ -1,6 +1,6 @@
 # Universal Gasless - Smart Contracts
 
-A smart contract project implementing EIP-7702 for universal gasless transaction execution, enabling EOAs to have
+A smart contract project leveraging EIP-7702 for universal gasless transaction execution, enabling EOAs to have
 contract-like functionality without requiring gas.
 
 ## Overview
@@ -9,9 +9,8 @@ The Universal Gasless Delegate is a smart contract system that allows EOAs (Exte
 transaction execution to a contract while retaining full control of authorization. This enables users to perform gasless
 transactions and access advanced features typically only available to contract accounts.
 
-> **Important:** This contract requires deployment on networks that have activated the Pectra hardfork (and consequently
-> Dencun), as it leverages [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) (setting code for an EOA) and
-> [EIP-1153](https://eips.ethereum.org/EIPS/eip-1153) (transient storage opcodes).
+> **Important:** This contract requires deployment on networks that have activated the Pectra hardfork, as it leverages
+> [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702) (setting code for an EOA).
 
 ### Key Features
 
@@ -75,20 +74,6 @@ $ bun install # install Solhint, Prettier, and other Node.js deps
 
 If this is your first time with Foundry, check out the
 [installation](https://github.com/foundry-rs/foundry#installation) instructions.
-
-### Features
-
-If you're interested in exploring Foundry in more detail, you should look at the
-[Foundry Book](https://book.getfoundry.sh). In particular, you may be interested in reading the
-[Writing Tests](https://book.getfoundry.sh/forge/writing-tests.html) tutorial.
-
-### VSCode Integration
-
-This template is IDE agnostic, but for the best user experience, you may want to use it in VSCode alongside Nomic
-Foundation's [Solidity extension](https://marketplace.visualstudio.com/items?itemName=NomicFoundation.hardhat-solidity).
-
-For guidance on how to integrate a Foundry project in VSCode, please refer to this
-[guide](https://book.getfoundry.sh/config/vscode).
 
 ## Installing Dependencies
 
@@ -161,14 +146,15 @@ $ anvil
 Then, in another terminal, run the deploy script:
 
 ```sh
-$ forge script script/Deploy.s.sol --broadcast --fork-url http://localhost:8545
+$ forge script script/DeployContracts.s.sol --broadcast --fork-url http://localhost:8545
 ```
-
-For this script to work, you need to have a `MNEMONIC` environment variable set to a valid
-[BIP39 mnemonic](https://iancoleman.io/bip39/).
 
 For instructions on how to deploy to a testnet or mainnet, check out the
 [Solidity Scripting](https://book.getfoundry.sh/tutorials/solidity-scripting.html) tutorial.
+
+```sh
+$ source .env && forge script script/DeployContracts.s.sol:UGaslessDelegateDeploy --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast 
+```
 
 ### Format
 
