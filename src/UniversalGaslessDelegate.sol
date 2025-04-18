@@ -303,7 +303,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     /**
      * @inheritdoc NonceBitmap
      */
-    function getNonceBitmap(uint256 wordPos) public view virtual override onlyProxy returns (uint256 bitmap) {
+    function getNonceBitmap(uint248 wordPos) public view virtual override onlyProxy returns (uint256 bitmap) {
         return super.getNonceBitmap(wordPos);
     }
 
