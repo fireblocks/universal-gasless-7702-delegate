@@ -301,14 +301,14 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     /**
      * @inheritdoc NonceBitmap
      */
-    function getNonceBitmap(uint256 wordPos) public view virtual override onlyProxy returns (uint256) {
+    function getNonceBitmap(uint256 wordPos) public view virtual override onlyProxy returns (uint256 bitmap) {
         return super.getNonceBitmap(wordPos);
     }
 
     /**
      * @inheritdoc NonceBitmap
      */
-    function isNonceUsed(uint256 nonce) public view virtual override onlyProxy returns (bool) {
+    function isNonceUsed(uint256 nonce) public view virtual override onlyProxy returns (bool isUsed) {
         return super.isNonceUsed(nonce);
     }
 
@@ -354,9 +354,9 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *      it can be called both on the implementation contract and on delegated EOAs, as it should convey the same
      * meaning. It signals if delegate implementation is safe to use.
      *
-     * @return True if the contract is paused via the KillSwitch, false otherwise
+     * @return isPausedState True if the contract is paused via the KillSwitch, false otherwise
      */
-    function isPaused() external view returns (bool) {
+    function isPaused() external view returns (bool isPausedState) {
         return _KILLSWITCH_CONTRACT.paused();
     }
 
@@ -384,9 +384,9 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * ```
      *
      * @param mode The fully-qualified execution mode to check
-     * @return True if the mode is supported, false otherwise
+     * @return isSupported True if the mode is supported, false otherwise
      */
-    function supportsExecutionMode(bytes32 mode) external pure returns (bool) {
+    function supportsExecutionMode(bytes32 mode) external pure returns (bool isSupported) {
         return _executionModeId(mode) != 0;
     }
 
@@ -400,14 +400,14 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *   address will revert.
      *
      * @param interfaceId The interface identifier to check
-     * @return True when `interfaceId` is either:
+     * @return isSupported True when `interfaceId` is either:
      *   - the {IERC7821} interface id
      *   - the {IERC1271} interface id
      *   - the {IERC721Receiver} interface id (checked in TokenReceiver)
      *   - the {IERC1155Receiver} interface id (checked in ERC1155Holder)
      *   - the {IERC165} interface id (checked in ERC1155Holder -> ERC165)
      */
-    function supportsInterface(bytes4 interfaceId) public view virtual override onlyProxy returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view virtual override onlyProxy returns (bool isSupported) {
         return interfaceId == type(IERC7821).interfaceId || interfaceId == type(IERC1271).interfaceId
             || super.supportsInterface(interfaceId);
     }
@@ -470,9 +470,9 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *        Unused = EMPTY, ModeSelector = Default (0x00000000), ModePayload = ANY
      *
      * @param mode The execution mode to analyze
-     * @return An identifier for the execution mode type (0 = unsupported)
+     * @return modeId An identifier for the execution mode type (0 = unsupported)
      */
-    function _executionModeId(bytes32 mode) internal pure returns (uint8) {
+    function _executionModeId(bytes32 mode) internal pure returns (uint8 modeId) {
         // Check if the mode is supported. Only checks the first 10 bytes of the mode
         bytes10 execModeMinusPayload = bytes10(mode);
         if (execModeMinusPayload == bytes10(0x00000000000078210001)) {
@@ -626,9 +626,17 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *
      * @param _hash The hash of the data that was signed
      * @param _signature A 65-byte ECDSA signature produced by the signer
-     * @return true if the signature is valid, false otherwise
+     * @return isValid true if the signature is valid, false otherwise
      */
-    function _isValidRawSignature(bytes32 _hash, bytes calldata _signature) internal view virtual returns (bool) {
+    function _isValidRawSignature(
+        bytes32 _hash,
+        bytes calldata _signature
+    )
+        internal
+        view
+        virtual
+        returns (bool isValid)
+    {
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(_hash, _signature);
         return address(this) == recovered && err == ECDSA.RecoverError.NoError;
     }

@@ -92,9 +92,9 @@ abstract contract TypedAuthorization is IERC5267 {
     /**
      * @notice Returns the domain separator for the current chain
      * @dev Always recalculates the domain separator to support proxy accounts
-     * @return The domain separator bytes32 value
+     * @return domainSeparator The domain separator bytes32 value
      */
-    function _domainSeparatorV4() internal view returns (bytes32) {
+    function _domainSeparatorV4() internal view returns (bytes32 domainSeparator) {
         return keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, address(this)));
     }
 
@@ -106,9 +106,9 @@ abstract contract TypedAuthorization is IERC5267 {
      * @dev This hash can be used with {ECDSA-recover} to obtain the signer of a message
      *
      * @param structHash The hash of the struct being signed
-     * @return The EIP712 typed data hash
+     * @return hashedData The EIP712 typed data hash
      */
-    function _hashTypedDataV4(bytes32 structHash) internal view virtual returns (bytes32) {
+    function _hashTypedDataV4(bytes32 structHash) internal view virtual returns (bytes32 hashedData) {
         return MessageHashUtils.toTypedDataHash(_domainSeparatorV4(), structHash);
     }
 
@@ -121,7 +121,7 @@ abstract contract TypedAuthorization is IERC5267 {
      * @param value The value to send
      * @param data The call data
      * @param nonce The nonce
-     * @return The `AuthorizedExecutions` typed hash
+     * @return hashedData The `AuthorizedExecutions` typed hash
      */
     function _hashTypedSingleExecutionAuthorization(
         bytes32 mode,
@@ -132,7 +132,7 @@ abstract contract TypedAuthorization is IERC5267 {
     )
         internal
         view
-        returns (bytes32)
+        returns (bytes32 hashedData)
     {
         // Directly calculate the execution hash for the single execution
         bytes32 seHash = keccak256(abi.encode(_EXECUTION_TYPEHASH, target, value, keccak256(data)));
@@ -151,7 +151,7 @@ abstract contract TypedAuthorization is IERC5267 {
      * @param mode The execution mode
      * @param calls The array of executions
      * @param nonce The nonce
-     * @return The `AuthorizedExecutions` typed hash
+     * @return hashedData The `AuthorizedExecutions` typed hash
      */
     function _hashTypedBatchExecutionAuthorization(
         bytes32 mode,
@@ -160,7 +160,7 @@ abstract contract TypedAuthorization is IERC5267 {
     )
         internal
         view
-        returns (bytes32)
+        returns (bytes32 hashedData)
     {
         // Hash each execution in the batch
         bytes32[] memory executionHashes = new bytes32[](calls.length);
