@@ -159,7 +159,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     constructor(address killswitchContract) {
         _KILLSWITCH_CONTRACT = IKillSwitch(killswitchContract);
         // check if it is a valid IKillSwitch contract that is not paused
-        require(_KILLSWITCH_CONTRACT.paused() == false, LibErrors.InvalidImplementation());
+        require(!_KILLSWITCH_CONTRACT.paused(), LibErrors.InvalidImplementation());
     }
 
     // ==================== EXTERNAL AND PUBLIC ====================
