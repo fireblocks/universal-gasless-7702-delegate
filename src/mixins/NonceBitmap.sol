@@ -33,7 +33,7 @@ abstract contract NonceBitmap {
      * @param wordPos The word position to check
      * @return bitmap The nonce bitmap at the given position
      */
-    function getNonceBitmap(uint256 wordPos) public view virtual returns (uint256 bitmap) {
+    function getNonceBitmap(uint248 wordPos) public view virtual returns (uint256 bitmap) {
         return _nonceStorage().nonceBitmap[wordPos];
     }
 
