@@ -27,9 +27,9 @@ abstract contract TokenReceiver is ERC721Holder, ERC1155Holder {
      *   - the {IERC165} interface id (checked in ERC1155Holder -> ERC165)
      *
      * @param interfaceId The interface identifier to check
-     * @return True if the contract supports `interfaceId`
+     * @return isSupported True if the contract supports `interfaceId`
      */
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool isSupported) {
         return interfaceId == type(IERC721Receiver).interfaceId || super.supportsInterface(interfaceId);
     }
 }

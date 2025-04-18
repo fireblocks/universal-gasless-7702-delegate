@@ -31,9 +31,9 @@ abstract contract NonceBitmap {
     /**
      * @notice Returns the nonce bitmap at a given word position
      * @param wordPos The word position to check
-     * @return The nonce bitmap at the given position
+     * @return bitmap The nonce bitmap at the given position
      */
-    function getNonceBitmap(uint256 wordPos) public view virtual returns (uint256) {
+    function getNonceBitmap(uint256 wordPos) public view virtual returns (uint256 bitmap) {
         return _nonceStorage().nonceBitmap[wordPos];
     }
 
@@ -41,9 +41,9 @@ abstract contract NonceBitmap {
      * @notice This function checks if a nonce is already used
      * @dev Checks whether a nonce has been flipped in the bitmap
      * @param nonce The nonce to check
-     * @return True if the nonce has been used, false otherwise
+     * @return isUsed True if the nonce has been used, false otherwise
      */
-    function isNonceUsed(uint256 nonce) public view virtual returns (bool) {
+    function isNonceUsed(uint256 nonce) public view virtual returns (bool isUsed) {
         (uint256 wordPos, uint256 bitPos) = bitmapPositions(nonce);
         uint256 bit = 1 << bitPos;
         return _nonceStorage().nonceBitmap[wordPos] & bit != 0;
