@@ -56,8 +56,7 @@ contract UGDNonceBitmapTest is Test, UniversalGaslessDelegationHelper {
 
     /**
      * @dev Test that isNonceUsed correctly identifies used and unused nonces
-     * NOTE: Can be replaced with a Harness test of the internal function. This applies to many
-     * of the tests in this file.
+     * NOTE: A Harness test for the internal function has been created. Test not removed from here for completeness.
      */
     function test_IsNonceUsed() public {
         uint256 nonce = 100; // bit position 100 in word 0
