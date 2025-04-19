@@ -5,6 +5,9 @@ pragma solidity ^0.8.27;
 
 /**
  * @dev Interface for minimal batch executor.
+ *
+ * @custom:source
+ * https://github.com/OpenZeppelin/openzeppelin-community-contracts/blob/e19d51c/contracts/interfaces/IERC7821.sol
  */
 interface IERC7821 {
     /**

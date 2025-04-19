@@ -19,11 +19,11 @@ abstract contract NonceBitmap {
 
     /**
      * @notice This function marks a nonce as used
-     * @dev This function is used to invalidate a nonce
+     * @dev This function is used to invalidate a nonce. Reverts with {LibErrors.InvalidNonce}
+     *      if the nonce has already been used.
      *
-     * Calling Conditions:
-     * - The nonce must not be already marked as used
-     * - The caller must be the owner of the contract
+     * Deriving contracts must ensure proper access control.
+     *
      * @param nonce The nonce to invalidate
      */
     function invalidateNonce(uint256 nonce) external virtual;
@@ -73,10 +73,9 @@ abstract contract NonceBitmap {
 
     /**
      * @notice Sets the nonce to used
-     * @dev Checks whether a nonce is taken and sets the bit at the bit position in the bitmap
+     * @dev Checks whether a nonce is taken and sets the bit at the bit position in the bitmap.
      *
-     * Calling Conditions:
-     * - The nonce must not have been previously used
+     * Reverts with {LibErrors.InvalidNonce} if the nonce has already been used.
      *
      * @param nonce The nonce to spend
      */
