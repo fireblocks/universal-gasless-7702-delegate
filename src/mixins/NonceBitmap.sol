@@ -44,12 +44,25 @@ abstract contract NonceBitmap {
      * @return isUsed True if the nonce has been used, false otherwise
      */
     function isNonceUsed(uint256 nonce) public view virtual returns (bool isUsed) {
-        (uint256 wordPos, uint256 bitPos) = bitmapPositions(nonce);
+        (uint256 wordPos, uint256 bitPos) = _bitmapPositions(nonce);
         uint256 bit = 1 << bitPos;
         return _nonceStorage().nonceBitmap[wordPos] & bit != 0;
     }
 
     // ========================= INTERNAL ==========================
+
+    /**
+     * @notice Returns the index of the bitmap and the bit position within the bitmap
+     * @param nonce The nonce to get the associated word and bit positions
+     * @return wordPos The word position or index into the nonceBitmap
+     * @return bitPos The bit position
+     * @dev The first 248 bits of the nonce value is the index of the desired bitmap
+     * @dev The last 8 bits of the nonce value is the position of the bit in the bitmap
+     */
+    function _bitmapPositions(uint256 nonce) internal pure returns (uint256 wordPos, uint256 bitPos) {
+        wordPos = uint248(nonce >> 8);
+        bitPos = uint8(nonce);
+    }
 
     /**
      * @notice This represents the function signature to be used when accessing the Nonce Storage
@@ -68,25 +81,10 @@ abstract contract NonceBitmap {
      * @param nonce The nonce to spend
      */
     function _useUnorderedNonce(uint256 nonce) internal {
-        (uint256 wordPos, uint256 bitPos) = bitmapPositions(nonce);
+        (uint256 wordPos, uint256 bitPos) = _bitmapPositions(nonce);
         uint256 bit = 1 << bitPos;
         uint256 flipped = _nonceStorage().nonceBitmap[wordPos] ^= bit;
 
         if (flipped & bit == 0) revert LibErrors.InvalidNonce();
-    }
-
-    // ========================== PRIVATE ==========================
-
-    /**
-     * @notice Returns the index of the bitmap and the bit position within the bitmap
-     * @param nonce The nonce to get the associated word and bit positions
-     * @return wordPos The word position or index into the nonceBitmap
-     * @return bitPos The bit position
-     * @dev The first 248 bits of the nonce value is the index of the desired bitmap
-     * @dev The last 8 bits of the nonce value is the position of the bit in the bitmap
-     */
-    function bitmapPositions(uint256 nonce) private pure returns (uint256 wordPos, uint256 bitPos) {
-        wordPos = uint248(nonce >> 8);
-        bitPos = uint8(nonce);
     }
 }
