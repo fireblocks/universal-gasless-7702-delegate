@@ -26,7 +26,9 @@ abstract contract NonceBitmap {
      *
      * @param nonce The nonce to invalidate
      */
-    function invalidateNonce(uint256 nonce) external virtual;
+    function invalidateNonce(uint256 nonce) external virtual {
+        _useUnorderedNonce(nonce);
+    }
 
     /**
      * @notice Returns the nonce bitmap at a given word position
