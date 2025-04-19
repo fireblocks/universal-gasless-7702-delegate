@@ -291,9 +291,11 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @dev This function is used to invalidate a nonce
      *
      * Calling Conditions:
-     * - The nonce must not be already marked as used
-     * - The caller must be the owner of the contract
+     * - The caller must be the Delegated EOA or the contract itself (checked by `onlySelf`)
      * - If the contract context is paused, the call must come from the Delegated EOA directly
+     *
+     * Reverts with {LibErrors.InvalidNonce} if the nonce has already been used.
+     *
      * @param nonce The nonce to invalidate
      */
     function invalidateNonce(uint256 nonce) external virtual override onlyProxy onlySelf {
