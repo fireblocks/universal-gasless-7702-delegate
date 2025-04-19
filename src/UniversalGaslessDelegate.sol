@@ -309,6 +309,33 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     }
 
     /**
+     * @notice Returns the fields and values that describe the domain separator to be used as part of EIP-712
+     * signatures verified by this contract.
+     *
+     * @dev This function overrides {TypedAuthorization.eip712Domain()} to ensure it can only be called in the context
+     * of a delegated EOA (via proxy). Calling it directly on the implementation address will revert with
+     * {LibErrors.UnauthorizedCallContext}.
+     */
+    function eip712Domain()
+        public
+        view
+        virtual
+        override
+        onlyProxy
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
+        )
+    {
+        return super.eip712Domain();
+    }
+
+    /**
      * @inheritdoc NonceBitmap
      */
     function getNonceBitmap(uint248 wordPos) public view virtual override onlyProxy returns (uint256 bitmap) {

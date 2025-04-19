@@ -4,7 +4,7 @@ pragma solidity 0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { TypedAuthorization } from "../src/mixins/TypedAuthorization.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
-import { IERC5267 } from "@openzeppelin/contracts/interfaces/IERC5267.sol";
+import { LibErrors } from "../src/library/LibErrors.sol";
 import "./mocks/MockKillSwitch.sol";
 
 /**
@@ -70,6 +70,14 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         assertEq(verifyingContract, address(gaslessDelegate), "VerifyingContract should be the impl. address");
         assertEq(salt, bytes32(0), "Salt should be empty");
         assertEq(extensions.length, 0, "Extensions should be empty");
+    }
+
+    /**
+     * @notice Test that the eip712Domain function reverts when called directly on the implementation contract
+     */
+    function test_RevertsIf_CallingEip712DomainOnImplementation() public {
+        vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
+        gaslessDelegate.eip712Domain();
     }
 
     /**
