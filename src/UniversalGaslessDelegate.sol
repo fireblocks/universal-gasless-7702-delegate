@@ -246,6 +246,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
         (sobExecutionData, opData) = _extractExecAndOpData(executionData);
         // Check if optional opData is present. If not, we rely on the caller being the Delegated EOA itself for auth
         if (opData.length != 0) {
+            // BATCH_CALL mode does not support an opData component
+            if (modeId == BATCH_CALL) revert LibErrors.UnauthorizedExecution();
             // Check if the opData is valid. Decode opData to extract nonce and signature
             (uint256 nonce, bytes calldata signature) = _decodeOpData(opData);
             // irrespective of single or batch, the nonce is always used on modes with opData auth
