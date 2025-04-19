@@ -38,6 +38,8 @@ import { IKillSwitch } from "./interface/IKillSwitch.sol";
  * - Provides ERC-1271 signature validation compatibility for existing protocols
  * - Includes token receiver capabilities (ERC-721 and ERC-1155)
  * - Emergency pause functionality via KillSwitch contract
+ *
+ * @custom:security-contact support@fireblocks.com
  */
 contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenReceiver, TypedAuthorization {
     // =============================================================

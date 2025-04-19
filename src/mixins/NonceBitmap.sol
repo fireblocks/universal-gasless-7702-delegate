@@ -9,6 +9,7 @@ import { LibErrors } from "../library/LibErrors.sol";
  * @title NonceBitmap
  * @notice This contract manages unordered nonces using a Bitmap approach to efficiently store and track nonce usage.
  * @dev Provides functionality for managing and querying nonces
+ * @custom:security-contact support@fireblocks.com
  */
 abstract contract NonceBitmap {
     // =============================================================
