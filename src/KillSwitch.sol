@@ -11,6 +11,7 @@ import { IKillSwitch } from "./interface/IKillSwitch.sol";
  * @notice A simple contract that manages a paused state. When embedded in a Delegate contract as a point of reference,
  * it can effectively pause delegate contract operations for all delegated EOAs for the observing implementation.
  * @dev Implements pause functionality with owner-only access controls for emergency situations
+ * @custom:security-contact support@fireblocks.com
  */
 contract KillSwitch is IKillSwitch, Ownable, Pausable {
     // =============================================================

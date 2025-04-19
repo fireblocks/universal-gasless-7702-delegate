@@ -15,6 +15,8 @@ import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721H
  *   - the {IERC1155Receiver} interface allowing it to receive ERC1155 tokens
  *   - the {IERC721Receiver} interface allowing it to receive ERC721 tokens
  *   - the EIP-165 standard for interface detection of the same and the two above interfaces
+ *
+ * @custom:security-contact support@fireblocks.com
  */
 abstract contract TokenReceiver is ERC721Holder, ERC1155Holder {
     /**

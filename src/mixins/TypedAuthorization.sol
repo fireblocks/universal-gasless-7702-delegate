@@ -25,6 +25,8 @@ import { Execution } from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol
  * an eventual fork of the chain. This contract implements the version of the encoding known as "signTypedDataV4".
  *
  * This contract is derived from the OpenZeppelin Contracts implementation of EIP712 (utils/cryptography/EIP712.sol).
+ *
+ * @custom:security-contact support@fireblocks.com
  */
 abstract contract TypedAuthorization is IERC5267 {
     // =============================================================
