@@ -22,12 +22,6 @@ pragma solidity ^0.8.27;
  */
 library LibErrors {
     /**
-     * @notice This error indicates that the function called is inoperable.
-     * @notice Thrown when an inherited function has been disabled.
-     */
-    error FunctionDisabled();
-
-    /**
      * @notice This error indicates that a signature has expired
      * @dev Indicates that current block timestamp is past the deadline
      */
