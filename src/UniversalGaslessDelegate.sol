@@ -272,6 +272,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
                 _execBatch(executionBatch);
                 return;
             }
+            // BATCH_CALL mode does not support an opData component
+            if (modeId == BATCH_CALL) revert LibErrors.UnauthorizedExecution();
         } else {
             require(msg.sender == address(this), LibErrors.UnauthorizedCaller());
             // For mode SINGLE_CALL_OPDATA_AUTH, opData is required for authorization

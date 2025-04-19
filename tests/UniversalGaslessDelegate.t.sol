@@ -859,6 +859,95 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.stopPrank();
     }
 
+    /**
+     * @notice Test that BATCH_CALL mode with opData is rejected
+     * @dev This test verifies the fix for the issue where an attacker could use BATCH_CALL mode with opData
+     *      to invalidate a nonce without signature validation
+     */
+    function test_RevertWhen_BatchCallModeWithOpData_FromSelf() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Construct the execution mode - BATCH_CALL (Mode ID = 3)
+        // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x00000000), ModePayload = 0
+        bytes32 mode = bytes32(0x0100000000000000000000000000000000000000000000000000000000000000);
+
+        // Choose a nonce that would be invalidated by the attack
+        uint256 targetNonce = 9999;
+
+        // Verify nonce is not used initially
+        assertFalse(delegatedAccount.isNonceUsed(targetNonce), "Nonce should not be used initially");
+
+        // Create an arbitrary execution batch (any valid batch)
+        Execution[] memory executionBatch = new Execution[](1);
+        executionBatch[0] = Execution(address(0x1234), 0, "");
+
+        // Encode the batch execution data
+        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
+        // Create opData with the target nonce but an invalid signature
+        bytes memory fakeSignature = new bytes(65);
+        bytes memory opData = abi.encodePacked(targetNonce, fakeSignature);
+        // Combine the execution data with opData
+        bytes memory executionData = abi.encode(batchExecData, opData);
+
+        // Try executing from the delegated EOA itself, which should still revert
+        // since BATCH_CALL mode with opData is not supported
+        vm.startPrank(address(delegatedAccount));
+
+        // Should revert with UnauthorizedExecution as opData is not supported in BATCH_CALL mode
+        vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
+        delegatedAccount.execute(mode, executionData);
+
+        vm.stopPrank();
+
+        // Verify nonce is still unused after the attempted attack
+        assertFalse(delegatedAccount.isNonceUsed(targetNonce), "Nonce should remain unused after rejected execution");
+    }
+
+    /**
+     * @notice Test that BATCH_CALL mode with opData is rejected
+     * @dev This test verifies the fix for the issue where an attacker could use BATCH_CALL mode with opData
+     *      to invalidate a nonce without signature validation
+     */
+    function test_RevertWhen_BatchCallModeWithOpData_FromUnauthorizedCaller() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Construct the execution mode - BATCH_CALL (Mode ID = 3)
+        // CallType = (0x01), ExecType = (0x00), Unused = EMPTY, ModeSelector = (0x00000000), ModePayload = 0
+        bytes32 mode = bytes32(0x0100000000000000000000000000000000000000000000000000000000000000);
+
+        // Choose a nonce that would be invalidated by the attack
+        uint256 targetNonce = 9999;
+
+        // Verify nonce is not used initially
+        assertFalse(delegatedAccount.isNonceUsed(targetNonce), "Nonce should not be used initially");
+
+        // Create an arbitrary execution batch (any valid batch)
+        Execution[] memory executionBatch = new Execution[](1);
+        executionBatch[0] = Execution(address(0x1234), 0, "");
+
+        // Encode the batch execution data
+        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
+        // Create opData with the target nonce but an invalid signature
+        bytes memory fakeSignature = new bytes(65);
+        bytes memory opData = abi.encodePacked(targetNonce, fakeSignature);
+        // Combine the execution data with opData
+        bytes memory executionData = abi.encode(batchExecData, opData);
+
+        // Execute from an unauthorized address
+        vm.startPrank(address(0xdead));
+
+        // Should revert with UnauthorizedExecution as opData is not supported in BATCH_CALL mode
+        vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
+        delegatedAccount.execute(mode, executionData);
+
+        vm.stopPrank();
+
+        // Verify nonce is still unused after the attempted attack
+        assertFalse(delegatedAccount.isNonceUsed(targetNonce), "Nonce should remain unused after rejected execution");
+    }
+
     function test_RevertWhen_ExecuteWithUnsupportedModeLikeSingleSelfCall() public {
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));
