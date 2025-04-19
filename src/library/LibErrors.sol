@@ -80,6 +80,7 @@ library LibErrors {
      *   - The signature provided cannot be attributed to the expected signer (the EOA that has performed an EIP-7702
      *     delegation to this contract)
      *   - The provided signature does not match the given execution payload
+     *   - The `opData` component was present and non-zero but the mode provided does not support it
      */
     error UnauthorizedExecution();
 
