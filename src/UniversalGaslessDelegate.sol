@@ -204,7 +204,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *     encoding is expected `abi.encode(sobExecutionData, opData)`, where:
      *     - in SINGLE_CALL_OPDATA_AUTH, `sobExecutionData` is abi.encodePacked(target, value, callData)
      *     - in BATCH_CALL_OPDATA_AUTH, `sobExecutionData` is abi.encode(calls)
-     *     - `opData` is abi.encodePacked(nonce, signature)
+     *     - `opData` is abi.encodePacked(nonce, deadline, signature)
      *   - For self-call mode (BATCH_CALL): `abi.encode(calls)` with no optional `opData`
      *
      * Authorization flow:
@@ -216,6 +216,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * 1. For modes with opData authorization (SINGLE_CALL_OPDATA_AUTH and BATCH_CALL_OPDATA_AUTH):
      *   - Calculate authorization digest using EIP-712 typed data signing
      *   - Validate that the nonce is not already used
+     *   - Verify the signature has not expired (current block timestamp <= deadline)
+     *   - Verify the caller matches the relayer in the signed authorization
      *   - Verify signature matches the Delegated EOA's
      * 2. For self-call mode (BATCH_CALL only):
      *    - Verify caller is the delegated EOA itself (`msg.sender == address(this)`)
@@ -246,15 +248,18 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
         (sobExecutionData, opData) = _extractExecAndOpData(executionData);
         // Check if optional opData is present. If not, we rely on the caller being the Delegated EOA itself for auth
         if (opData.length != 0) {
-            // Check if the opData is valid. Decode opData to extract nonce and signature
-            (uint256 nonce, bytes calldata signature) = _decodeOpData(opData);
+            // Decode opData to extract nonce, deadline and signature
+            (uint256 nonce, uint256 deadline, bytes calldata signature) = _decodeOpData(opData);
+            // Check if signature has expired
+            require(block.timestamp <= deadline, LibErrors.ExpiredSignature(deadline));
             // irrespective of single or batch, the nonce is always used on modes with opData auth
             _useUnorderedNonce(nonce);
             if (modeId == SINGLE_CALL_OPDATA_AUTH) {
                 // Perform authentication using opData and execute single call
                 (address target, uint256 value, bytes calldata callData) = ERC7579Utils.decodeSingle(sobExecutionData);
                 // create AuthorizedExecutions EIP712 hash
-                bytes32 sDigest = _hashTypedSingleExecutionAuthorization(mode, target, value, callData, nonce);
+                bytes32 sDigest =
+                    _hashTypedSingleExecutionAuthorization(mode, target, value, callData, nonce, deadline, msg.sender);
                 //validate signature
                 require(address(this) == ECDSA.recover(sDigest, signature), LibErrors.UnauthorizedExecution());
                 // Execute the call
@@ -265,7 +270,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
                 // Perform authentication using opData and execute batch calls
                 Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(sobExecutionData);
                 // create AuthorizedExecutions EIP712 hash
-                bytes32 bDigest = _hashTypedBatchExecutionAuthorization(mode, executionBatch, nonce);
+                bytes32 bDigest =
+                    _hashTypedBatchExecutionAuthorization(mode, executionBatch, nonce, deadline, msg.sender);
                 //validate signature
                 require(address(this) == ECDSA.recover(bDigest, signature), LibErrors.UnauthorizedExecution());
                 // Execute the batch calls
@@ -586,30 +592,36 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     }
 
     /**
-     * @notice Decodes the `opData` parameter to extract the nonce and signature components
-     * @dev Parses the opData byte array to extract a nonce value and ECDSA signature according to an expected packed
-     *      format.
+     * @notice Decodes the `opData` parameter, extracting the nonce, deadline and signature components
+     * @dev Parses the opData byte array to extract the nonce, deadline and ECDSA signature according to an expected
+     *      packed format.
      *
-     * The opData is expected to have an ABI packed mode:
-     *   - First 32 bytes: ABI-encoded uint256 nonce
-     *   - Next 65 bytes: ECDSA signature (r, s, v format)
+     * The opData is expected to be in ABI packed encoding format:
+     *  - 32 bytes for nonce
+     *  - 32 bytes for deadline
+     *  - 65 bytes for signature (r, s, v)
      *
-     * Calling Conditions:
-     *   - `opData` has exactly the expected length (97 bytes). Reverts with {LibErrors.OpDataDecodingError} otherwise.
+     * Reverts with {LibErrors.OpDataDecodingError} if opData is not at least 129 bytes.
      *
-     * @param opData The operation data containing nonce and signature
+     * @param opData The data containing nonce, deadline and signature
      * @return nonce The extracted nonce value used for replay protection
+     * @return deadline The timestamp after which the signature is no longer valid
      * @return signature The extracted 65-byte ECDSA signature
      */
-    function _decodeOpData(bytes calldata opData) internal pure returns (uint256 nonce, bytes calldata signature) {
-        // Verify that the opData is exactly 97 bytes long (32 bytes for nonce + 65 bytes for signature)
-        require(opData.length == 97, LibErrors.OpDataDecodingError());
+    function _decodeOpData(bytes calldata opData)
+        internal
+        pure
+        returns (uint256 nonce, uint256 deadline, bytes calldata signature)
+    {
+        // opData must contain a nonce, deadline and a signature, for a total of 129 bytes
+        require(opData.length == 129, LibErrors.OpDataDecodingError());
 
         // Extract nonce from the first 32 bytes
-        nonce = abi.decode(opData[:32], (uint256));
-        // Extract signature from the last 65 bytes
-        uint256 signatureStart = opData.length - 65;
-        signature = opData[signatureStart:];
+        nonce = uint256(bytes32(opData[:32]));
+        // Extract deadline from the next 32 bytes
+        deadline = uint256(bytes32(opData[32:64]));
+        // Extract signature from the remaining bytes
+        signature = opData[64:];
     }
 
     /**

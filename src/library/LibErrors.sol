@@ -28,6 +28,12 @@ library LibErrors {
     error FunctionDisabled();
 
     /**
+     * @notice This error indicates that a signature has expired
+     * @dev Indicates that current block timestamp is past the deadline
+     */
+    error ExpiredSignature(uint256 deadline);
+
+    /**
      * @notice This error indicates that a nonce has already been used.
      * @dev The nonce has already been used for this account.
      */

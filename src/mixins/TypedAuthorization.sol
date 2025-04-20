@@ -53,7 +53,7 @@ abstract contract TypedAuthorization is IERC5267 {
      */
     bytes32 internal constant _EXECUTION_AUTHORIZATION_TYPEHASH = keccak256(
         // solhint-disable-next-line max-line-length
-        "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+        "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
     );
 
     // Cache the domain separator as an immutable value, but also store the chain id that it corresponds to, in order to
@@ -151,6 +151,8 @@ abstract contract TypedAuthorization is IERC5267 {
      * @param value The value to send
      * @param data The call data
      * @param nonce The nonce
+     * @param deadline The timestamp after which the signature is no longer valid
+     * @param relayer The address of the relayer that is authorized to submit this transaction
      * @return hashedData The `AuthorizedExecutions` typed hash
      */
     function _hashTypedSingleExecutionAuthorization(
@@ -158,7 +160,9 @@ abstract contract TypedAuthorization is IERC5267 {
         address target,
         uint256 value,
         bytes memory data,
-        uint256 nonce
+        uint256 nonce,
+        uint256 deadline,
+        address relayer
     )
         internal
         view
@@ -168,8 +172,9 @@ abstract contract TypedAuthorization is IERC5267 {
         bytes32 seHash = keccak256(abi.encode(_EXECUTION_TYPEHASH, target, value, keccak256(data)));
         // When there's only one item, the executionsHash (plural) is just the packaged single hash
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
-        // Create the final hash including the mode and nonce
-        bytes32 structHash = keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, mode, executionsHash, nonce));
+        // Create the final hash including the calls, deadline, mode, nonce and relayer
+        bytes32 structHash =
+            keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, executionsHash, deadline, mode, nonce, relayer));
 
         return _hashTypedDataV4(structHash);
     }
@@ -181,12 +186,16 @@ abstract contract TypedAuthorization is IERC5267 {
      * @param mode The execution mode
      * @param calls The array of executions
      * @param nonce The nonce
+     * @param deadline The timestamp after which the signature is no longer valid
+     * @param relayer The address of the relayer that is authorized to submit this transaction
      * @return hashedData The `AuthorizedExecutions` typed hash
      */
     function _hashTypedBatchExecutionAuthorization(
         bytes32 mode,
         Execution[] memory calls,
-        uint256 nonce
+        uint256 nonce,
+        uint256 deadline,
+        address relayer
     )
         internal
         view
@@ -201,8 +210,9 @@ abstract contract TypedAuthorization is IERC5267 {
         }
         // Hash the array of execution hashes
         bytes32 executionsHash = keccak256(abi.encodePacked(executionHashes));
-        // Create the final hash including the mode and nonce
-        bytes32 structHash = keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, mode, executionsHash, nonce));
+        // Create the final hash including the calls, deadline, mode, nonce and relayer
+        bytes32 structHash =
+            keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, executionsHash, deadline, mode, nonce, relayer));
 
         return _hashTypedDataV4(structHash);
     }
