@@ -226,7 +226,7 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
     // Helper functions for calculating typed data hashes
 
     function _domainSeparator() internal view returns (bytes32) {
-        return keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, address(delegatedAccount)));
+        return keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, address(gaslessDelegate)));
     }
 
     function _hashTypedData(bytes32 structHash) internal view returns (bytes32) {

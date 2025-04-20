@@ -123,7 +123,7 @@ contract UGDForkTest is Test, UniversalGaslessDelegationHelper {
         uint256 nonce = 1;
 
         // Calculate the EIP-712 typed data hash for signature
-        bytes32 digest = _hashTypedSingleExecutionAuth(target, value, callData, nonce, address(delegatedAccount));
+        bytes32 digest = _hashTypedSingleExecutionAuth(target, value, callData, nonce);
 
         // Sign with userA's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
@@ -159,15 +159,14 @@ contract UGDForkTest is Test, UniversalGaslessDelegationHelper {
         address target,
         uint256 value,
         bytes memory data,
-        uint256 nonce,
-        address verifyingContract
+        uint256 nonce
     )
         internal
         view
         returns (bytes32)
     {
-        // Get domain separator for the delegated account
-        bytes32 domainSeparator = keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, verifyingContract));
+        // Get domain separator using the implementation contract address as verifying contract
+        bytes32 domainSeparator = keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, address(gaslessDelegate)));
 
         // Calculate execution hash
         bytes32 seHash = keccak256(abi.encode(_EXECUTION_TYPEHASH, target, value, keccak256(data)));

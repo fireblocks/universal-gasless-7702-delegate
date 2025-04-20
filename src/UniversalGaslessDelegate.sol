@@ -156,7 +156,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * - `InvalidImplementation()` if the contract is paused
      * @param killswitchContract Address of the killswitch contract
      */
-    constructor(address killswitchContract) {
+    constructor(address killswitchContract) TypedAuthorization() {
         _KILLSWITCH_CONTRACT = IKillSwitch(killswitchContract);
         // check if it is a valid IKillSwitch contract that is not paused
         require(_KILLSWITCH_CONTRACT.paused() == false, LibErrors.InvalidImplementation());
@@ -655,5 +655,17 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
         assembly ("memory-safe") {
             $.slot := _NONCE_STORAGE_LOCATION
         }
+    }
+
+    /**
+     * @notice Returns the address of the verifying contract to be used in the EIP712 domain separator
+     * @dev The verifyingContract used is the address of the implementation contract, set during deployment, to prevent
+     *      replay attacks if an EOA re-delegates to a different implementation.
+     * @return verifyingContract The address of the implementation contract
+     */
+    function _verifyingContractAddress() internal view virtual override returns (address verifyingContract) {
+        // During the construction phase, the value of `__implementation` might be empty, which is not a valid
+        // verifying contract. Therefore, we coalesce to the eventual implementation address.
+        return __implementation == address(0) ? address(this) : __implementation;
     }
 }

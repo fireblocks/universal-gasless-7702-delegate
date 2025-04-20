@@ -49,6 +49,24 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         assertEq(address(delegatedAccount), userA, "Delegated account should be the same as the user account");
     }
 
+    /**
+     * @dev Helper function to create a valid signature for EIP-712 typed data with the implementation contract as
+     * verifying contract
+     * @param structHash The hash of the struct being signed
+     * @return The signature bytes
+     */
+    function _createValidSignature(bytes32 structHash) internal view returns (bytes memory) {
+        // Calculate domain separator with implementation contract address
+        bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
+        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(gaslessDelegate)));
+        // Calculate the final digest
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+
+        // Sign the digest with userA's private key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
     function test_constructsCorrectly() public {
         // Test that the constructor checks the killswitch's paused state
         vm.expectCall(address(killswitchContract), abi.encodeWithSignature("paused()"));
@@ -212,27 +230,22 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Set up a nonce for this operation
         uint256 nonce = 123;
 
-        // Calculate the digest for signing using the same algorithm as in
-        // TypedAuthorization._hashTypedSingleExecutionAuthorization
-        // Step 0: Get domain separator components
-        bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
-        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
         // Step 1: Calculate the execution hash for the single execution
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
         bytes32 seHash = keccak256(abi.encode(executionTypehash, target, value, keccak256(callData)));
+
         // Step 2: Package as single item execution array hash
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
+
         // Step 3: Create the final struct hash including the mode and nonce
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
-        // Step 4: Create the final digest
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        // Sign the digest with userA's private key
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
 
         // Encode opData (nonce + signature)
         bytes memory opData = abi.encodePacked(nonce, signature);
@@ -298,11 +311,6 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         executionBatch[0] = Execution(target1, value1, callData1);
         executionBatch[1] = Execution(target2, value2, callData2);
 
-        // Calculate the digest for signing using the same algorithm as in
-        // TypedAuthorization._hashTypedBatchExecutionAuthorization
-        // Step 0: Get domain separator components
-        bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
-        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
         // Step 1: Calculate execution hashes for each call in the batch
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
         bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
@@ -316,23 +324,23 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
                 )
             );
         }
+
         // Step 2: Create the batch hash
         bytes memory encodedHashes = "";
         for (uint256 i = 0; i < executionHashes.length; i++) {
             encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
         }
         bytes32 executionsHash = keccak256(encodedHashes);
+
         // Step 3: Create the final struct hash including the mode and nonce
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
-        // Step 4: Create the final digest
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        // Sign the digest with userA's private key
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
 
         // Encode opData (nonce + signature)
         bytes memory opData = abi.encodePacked(nonce, signature);
@@ -682,7 +690,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
         // Step 4: Get domain separator components
         bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
-        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
+        // Use the implementation contract address as the verifying contract for domain separator
+        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(gaslessDelegate)));
         // Step 5: Create the final digest
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
 
@@ -769,7 +778,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
         // Step 4: Create the domain separator
         bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
-        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
+        // Use the implementation contract address as the verifying contract for domain separator
+        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(gaslessDelegate)));
         // Step 5: Create the final digest
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
 
@@ -1028,11 +1038,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Set up a nonce for the operation
         uint256 batchNonce = 1234;
 
-        // Calculate required signature
-        bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
-        bytes32 domainSeparator = keccak256(abi.encode(domainTypehash, block.chainid, address(delegatedAccount)));
+        // Calculate execution hashes
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
-
         bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
         for (uint256 i = 0; i < executionBatch.length; i++) {
             executionHashes[i] = keccak256(
@@ -1045,21 +1052,22 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
             );
         }
 
+        // Create the batch hash
         bytes memory encodedHashes = "";
         for (uint256 i = 0; i < executionHashes.length; i++) {
             encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
         }
         bytes32 executionsHash = keccak256(encodedHashes);
 
+        // Create the final struct hash
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
             "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, batchNonce));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
 
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
 
         // Encode opData (nonce + signature)
         bytes memory opData = abi.encodePacked(batchNonce, signature);
