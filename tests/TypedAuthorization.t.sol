@@ -50,6 +50,8 @@ contract TypedAuthorizationHarness is TypedAuthorization {
      * @param value The value to send
      * @param data The call data
      * @param nonce The nonce
+     * @param deadline The deadline timestamp
+     * @param relayer The authorized relayer address
      * @return The `AuthorizedExecutions` typed hash
      */
     function exposed_hashTypedSingleExecutionAuthorization(
@@ -57,13 +59,15 @@ contract TypedAuthorizationHarness is TypedAuthorization {
         address target,
         uint256 value,
         bytes memory data,
-        uint256 nonce
+        uint256 nonce,
+        uint256 deadline,
+        address relayer
     )
         external
         view
         returns (bytes32)
     {
-        return _hashTypedSingleExecutionAuthorization(mode, target, value, data, nonce);
+        return _hashTypedSingleExecutionAuthorization(mode, target, value, data, nonce, deadline, relayer);
     }
 
     /**
@@ -71,18 +75,22 @@ contract TypedAuthorizationHarness is TypedAuthorization {
      * @param mode The execution mode
      * @param calls The array of executions
      * @param nonce The nonce
+     * @param deadline The deadline timestamp
+     * @param relayer The authorized relayer address
      * @return The `AuthorizedExecutions` typed hash
      */
     function exposed_hashTypedBatchExecutionAuthorization(
         bytes32 mode,
         Execution[] memory calls,
-        uint256 nonce
+        uint256 nonce,
+        uint256 deadline,
+        address relayer
     )
         external
         view
         returns (bytes32)
     {
-        return _hashTypedBatchExecutionAuthorization(mode, calls, nonce);
+        return _hashTypedBatchExecutionAuthorization(mode, calls, nonce, deadline, relayer);
     }
 
     /**
@@ -113,16 +121,19 @@ contract TypedAuthorizationTest is Test {
     TypedAuthorizationHarness public harness;
     bytes32 public constant MODE_ANY = keccak256("anything");
 
+    // Test parameters
+    address public DEFAULT_RELAYER;
     // Known EIP-712 domain separator components
     bytes32 private constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
     bytes32 private constant EXECUTION_TYPEHASH = keccak256("Execution(address target,uint256 value,bytes data)");
     bytes32 private constant EXECUTION_AUTHORIZATION_TYPEHASH = keccak256(
         // solhint-disable-next-line max-line-length
-        "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+        "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
     );
 
     function setUp() public {
         harness = new TypedAuthorizationHarness();
+        DEFAULT_RELAYER = makeAddr("DEFAULT_RELAYER");
     }
 
     // =============================================================
@@ -267,16 +278,20 @@ contract TypedAuthorizationTest is Test {
         uint256 value = 1 ether;
         bytes memory data = abi.encodeWithSignature("test()");
         uint256 nonce = 42;
+        uint256 deadline = block.timestamp + 1 hours;
+        address relayer = DEFAULT_RELAYER;
 
         // Calculate the expected hash manually
         bytes32 executionHash = keccak256(abi.encode(EXECUTION_TYPEHASH, target, value, keccak256(data)));
         bytes32 executionsHash = keccak256(abi.encodePacked(executionHash));
-        bytes32 structHash = keccak256(abi.encode(EXECUTION_AUTHORIZATION_TYPEHASH, mode, executionsHash, nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTION_AUTHORIZATION_TYPEHASH, executionsHash, deadline, mode, nonce, relayer));
         bytes32 domainSeparator = harness.exposed_domainSeparatorV4();
         bytes32 expectedHash = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
 
         // Get the actual hash from the harness
-        bytes32 actualHash = harness.exposed_hashTypedSingleExecutionAuthorization(mode, target, value, data, nonce);
+        bytes32 actualHash =
+            harness.exposed_hashTypedSingleExecutionAuthorization(mode, target, value, data, nonce, deadline, relayer);
 
         // Assert that they match
         assertEq(actualHash, expectedHash, "Single execution hash should match expected value");
@@ -289,6 +304,8 @@ contract TypedAuthorizationTest is Test {
         // Create test parameters
         bytes32 mode = MODE_ANY;
         uint256 nonce = 42;
+        uint256 deadline = block.timestamp + 1 hours;
+        address relayer = DEFAULT_RELAYER;
 
         // Create test executions
         Execution[] memory executions = new Execution[](3);
@@ -308,12 +325,14 @@ contract TypedAuthorizationTest is Test {
             );
         }
         bytes32 executionsHash = keccak256(abi.encodePacked(executionHashes));
-        bytes32 structHash = keccak256(abi.encode(EXECUTION_AUTHORIZATION_TYPEHASH, mode, executionsHash, nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(EXECUTION_AUTHORIZATION_TYPEHASH, executionsHash, deadline, mode, nonce, relayer));
         bytes32 domainSeparator = harness.exposed_domainSeparatorV4();
         bytes32 expectedHash = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
 
         // Get the actual hash from the harness
-        bytes32 actualHash = harness.exposed_hashTypedBatchExecutionAuthorization(mode, executions, nonce);
+        bytes32 actualHash =
+            harness.exposed_hashTypedBatchExecutionAuthorization(mode, executions, nonce, deadline, relayer);
 
         // Assert that they match
         assertEq(actualHash, expectedHash, "Batch execution hash should match expected value");
@@ -326,12 +345,14 @@ contract TypedAuthorizationTest is Test {
         // Create test parameters
         bytes32 mode = hex"";
         uint256 nonce = 0;
+        uint256 deadline = 0;
+        address relayer = address(0);
 
         // Create an empty array of executions
         Execution[] memory executions = new Execution[](0);
 
         // Get the hash from the harness
-        bytes32 hash = harness.exposed_hashTypedBatchExecutionAuthorization(mode, executions, nonce);
+        bytes32 hash = harness.exposed_hashTypedBatchExecutionAuthorization(mode, executions, nonce, deadline, relayer);
 
         // The hash should be a valid bytes32 value
         assertTrue(hash != bytes32(0), "Empty batch hash should not be zero");
@@ -347,14 +368,18 @@ contract TypedAuthorizationTest is Test {
         uint256 value = 1 ether;
         bytes memory data = abi.encodeWithSignature("test()");
         uint256 nonce = 42;
+        uint256 deadline = block.timestamp + 1 hours;
+        address relayer = DEFAULT_RELAYER;
 
         // Create a batch with a single execution
         Execution[] memory executions = new Execution[](1);
         executions[0] = harness.createExecution(target, value, data);
 
         // Get the hashes from both functions
-        bytes32 singleHash = harness.exposed_hashTypedSingleExecutionAuthorization(mode, target, value, data, nonce);
-        bytes32 batchHash = harness.exposed_hashTypedBatchExecutionAuthorization(mode, executions, nonce);
+        bytes32 singleHash =
+            harness.exposed_hashTypedSingleExecutionAuthorization(mode, target, value, data, nonce, deadline, relayer);
+        bytes32 batchHash =
+            harness.exposed_hashTypedBatchExecutionAuthorization(mode, executions, nonce, deadline, relayer);
 
         // The hashes should be the same
         assertEq(singleHash, batchHash, "Single execution hash should match batch execution hash with one execution");

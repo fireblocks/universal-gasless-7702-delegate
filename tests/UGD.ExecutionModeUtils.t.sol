@@ -49,7 +49,7 @@ contract UniversalGaslessDelegateHarness is UniversalGaslessDelegate {
     function exposed_decodeOpData(bytes calldata opData)
         external
         pure
-        returns (uint256 nonce, bytes memory signature)
+        returns (uint256 nonce, uint256 deadline, bytes memory signature)
     {
         return _decodeOpData(opData);
     }
@@ -442,23 +442,26 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
     // =============================================================
 
     /**
-     * @notice Test decoding valid opData with nonce and signature
+     * @notice Test decoding valid opData with nonce, deadline and signature
      */
     function test_DecodeOpData_Valid() public view {
-        // Create valid opData (32 bytes nonce + 65 bytes signature)
+        // Create valid opData (32 bytes nonce + 32 bytes deadline + 65 bytes signature)
         uint256 expectedNonce = 12_345;
+        uint256 expectedDeadline = block.timestamp + 1 hours;
         bytes memory signature = new bytes(65);
         for (uint256 i = 0; i < 65; i++) {
             signature[i] = bytes1(uint8(i));
         }
 
-        bytes memory opData = abi.encodePacked(abi.encode(expectedNonce), signature);
+        bytes memory opData = abi.encodePacked(expectedNonce, expectedDeadline, signature);
 
         // Call exposed function to decode opData
-        (uint256 decodedNonce, bytes memory decodedSignature) = harness.exposed_decodeOpData(opData);
+        (uint256 decodedNonce, uint256 decodedDeadline, bytes memory decodedSignature) =
+            harness.exposed_decodeOpData(opData);
 
         // Verify results
         assertEq(decodedNonce, expectedNonce, "Decoded nonce should match expected");
+        assertEq(decodedDeadline, expectedDeadline, "Decoded deadline should match expected");
         assertEq(keccak256(decodedSignature), keccak256(signature), "Decoded signature should match expected");
     }
 
@@ -467,9 +470,9 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
      */
     function test_RevertWhen_DecodeOpData_InvalidLength() public {
         // Create invalid opData (wrong length)
-        bytes memory invalidOpData = new bytes(50); // Not 97 bytes
+        bytes memory invalidOpData = new bytes(50); // Not at least 129 bytes
 
-        // Call should revert with require error
+        // Call should revert with OpDataDecodingError
         vm.expectRevert(LibErrors.OpDataDecodingError.selector);
         harness.exposed_decodeOpData(invalidOpData);
     }

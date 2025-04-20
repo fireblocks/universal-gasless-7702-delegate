@@ -26,6 +26,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
     uint256 private userAPrivateKey;
     UniversalGaslessDelegate private delegatedAccount;
     address private pausedMockKillswitchContract;
+    address public constant DEFAULT_RELAYER = address(0x1337BEEF);
 
     using Packing for *;
 
@@ -229,26 +230,28 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Set up a nonce for this operation
         uint256 nonce = 123;
-
+        // Sample signature deadline
+        uint256 deadline = block.timestamp + 1 hours;
+        // Calculate the digest for signing
         // Step 1: Calculate the execution hash for the single execution
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
         bytes32 seHash = keccak256(abi.encode(executionTypehash, target, value, keccak256(callData)));
 
         // Step 2: Package as single item execution array hash
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
-
-        // Step 3: Create the final struct hash including the mode and nonce
+        // Step 3: Create the final struct hash including the calls, deadline, mode, nonce and relayer
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
-            "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
         );
-        bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, nonce, DEFAULT_RELAYER));
 
         // Use helper function to create valid signature
         bytes memory signature = _createValidSignature(structHash);
 
-        // Encode opData (nonce + signature)
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        // Encode opData (nonce + deadline + signature)
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
 
         // Encode executionData
         bytes memory singleExecData = abi.encodePacked(target, value, callData); // as per EIP-7579
@@ -262,7 +265,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         uint256 initialDelegatedBalance = address(delegatedAccount).balance;
 
         // Execute the transaction
-        vm.startPrank(address(0xdead)); // Use any address as the caller
+        vm.startPrank(DEFAULT_RELAYER);
         vm.expectEmit(true, true, true, true);
         emit MockCallTarget.Called(userA, value, callData);
         delegatedAccount.execute(mode, executionData);
@@ -305,6 +308,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Set up a nonce for this operation
         uint256 nonce = 456;
+        // Sample signature deadline
+        uint256 deadline = block.timestamp + 1 hours;
 
         // Create execution batch array
         Execution[] memory executionBatch = new Execution[](2);
@@ -331,19 +336,19 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
             encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
         }
         bytes32 executionsHash = keccak256(encodedHashes);
-
-        // Step 3: Create the final struct hash including the mode and nonce
+        // Step 3: Create the final struct hash including the calls, deadline, mode, nonce and relayer
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
-            "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
         );
-        bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, nonce, DEFAULT_RELAYER));
 
         // Use helper function to create valid signature
         bytes memory signature = _createValidSignature(structHash);
 
-        // Encode opData (nonce + signature)
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        // Encode opData (nonce + deadline + signature)
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
 
         // Encode batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
@@ -358,7 +363,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         uint256 initialDelegatedBalance = address(delegatedAccount).balance;
 
         // Execute the transaction
-        vm.startPrank(address(0xdead)); // Use any address as the caller
+        vm.startPrank(DEFAULT_RELAYER);
 
         // Expect events for both calls
         vm.expectEmit(true, true, true, true, address(mockTarget1));
@@ -647,7 +652,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.deal(address(delegatedAccount), 1 ether);
 
         // Execute from an unauthorized address
-        vm.startPrank(address(0xdead));
+        vm.startPrank(DEFAULT_RELAYER);
 
         // It should revert with UnauthorizedCaller error when called from third party EOA
         vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
@@ -685,7 +690,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Step 3: Create the final struct hash including the mode and nonce
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
-            "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
         );
         bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
         // Step 4: Get domain separator components
@@ -701,7 +706,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory invalidSignature = abi.encodePacked(r, s, v);
 
         // Encode opData with invalid signature
-        bytes memory opData = abi.encodePacked(nonce, invalidSignature);
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory opData = abi.encodePacked(nonce, deadline, invalidSignature);
 
         // Encode executionData for single call
         bytes memory singleExecData = abi.encodePacked(target, value, callData);
@@ -711,7 +717,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.deal(address(delegatedAccount), 1 ether);
 
         // Execute the transaction with invalid signature should revert
-        vm.startPrank(address(0xdead));
+        vm.startPrank(DEFAULT_RELAYER);
 
         // The exact revert error will depend on how _isValidRawSignature is used
         // This would typically be a signature validation error
@@ -744,6 +750,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Set up a nonce for this operation
         uint256 nonce = 987;
+        // Sample signature deadline
+        uint256 deadline = block.timestamp + 1 hours;
 
         // Create execution batch array
         Execution[] memory executionBatch = new Execution[](2);
@@ -770,12 +778,13 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
             encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
         }
         bytes32 executionsHash = keccak256(encodedHashes);
-        // Step 3: Create the final struct hash
+        // Step 3: Create the final struct hash including the calls, deadline, mode, nonce and relayer
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
-            "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
         );
-        bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, nonce, DEFAULT_RELAYER));
         // Step 4: Create the domain separator
         bytes32 domainTypehash = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
         // Use the implementation contract address as the verifying contract for domain separator
@@ -789,7 +798,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory invalidSignature = abi.encodePacked(r, s, v);
 
         // Encode opData with invalid signature
-        bytes memory opData = abi.encodePacked(nonce, invalidSignature);
+        bytes memory opData = abi.encodePacked(nonce, deadline, invalidSignature);
 
         // Encode batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
@@ -799,9 +808,138 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.deal(address(delegatedAccount), 1 ether);
 
         // Execute the transaction with invalid signature should revert
-        vm.startPrank(address(0xdead));
+        vm.startPrank(DEFAULT_RELAYER);
 
         vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
+        delegatedAccount.execute(mode, executionData);
+
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test that execution reverts when deadline has passed
+     */
+    function test_RevertWhen_ExecuteWithExpiredSignature() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Deploy a mock target contract to call
+        MockCallTarget mockTarget = new MockCallTarget();
+        vm.deal(address(mockTarget), 0);
+
+        // Set up execution parameters
+        address target = address(mockTarget);
+        uint256 value = 0.1 ether;
+        bytes memory callData = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 42);
+
+        // Construct the execution mode - Single call type with Auth (Mode ID = 1)
+        bytes32 mode = bytes32(hex"00000000000078210001");
+
+        // Set up a nonce for this operation
+        uint256 nonce = 123;
+        // Set deadline to the minimum possible value to simulate expiration
+        uint256 deadline = 0;
+
+        // Calculate the digest for signing
+        bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
+        bytes32 seHash = keccak256(abi.encode(executionTypehash, target, value, keccak256(callData)));
+        bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
+        bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
+        );
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, nonce, DEFAULT_RELAYER));
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
+
+        // Encode opData (nonce + deadline + signature)
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+
+        // Encode executionData
+        bytes memory singleExecData = abi.encodePacked(target, value, callData);
+        bytes memory executionData = abi.encode(singleExecData, opData);
+
+        // Fund the delegated user
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Execute the transaction with expired signature should revert
+        vm.startPrank(DEFAULT_RELAYER);
+
+        // Expect revert with ExpiredSignature error
+        vm.expectRevert(abi.encodeWithSelector(LibErrors.ExpiredSignature.selector, deadline));
+        delegatedAccount.execute(mode, executionData);
+
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test that execution reverts when called by an unauthorized relayer
+     */
+    function test_RevertWhen_ExecuteWithUnauthorizedRelayer() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Deploy a mock target contract to call
+        MockCallTarget mockTarget = new MockCallTarget();
+        vm.deal(address(mockTarget), 0);
+
+        // Set up execution parameters
+        address target = address(mockTarget);
+        uint256 value = 0.1 ether;
+        bytes memory callData = abi.encodeWithSelector(MockCallTarget.returnUint.selector, 42);
+
+        // Construct the execution mode - Single call type with Auth (Mode ID = 1)
+        bytes32 mode = bytes32(hex"00000000000078210001");
+
+        // Set up a nonce for this operation
+        uint256 nonce = 456;
+        // Sample signature deadline
+        uint256 deadline = block.timestamp + 1 hours;
+        // Use a specific authorized relayer (different from DEFAULT_RELAYER)
+        address unauthorizedRelayer = address(0xABCD);
+        address authorizedRelayer = DEFAULT_RELAYER;
+
+        // Make sure the addresses are different
+        assertTrue(authorizedRelayer != unauthorizedRelayer, "Test requires different relayer addresses");
+
+        // Calculate the digest for signing with the authorized relayer
+        bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
+        bytes32 seHash = keccak256(abi.encode(executionTypehash, target, value, keccak256(callData)));
+        bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
+        bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
+        );
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, nonce, authorizedRelayer));
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
+
+        // Encode opData (nonce + deadline + signature)
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+
+        // Encode executionData
+        bytes memory singleExecData = abi.encodePacked(target, value, callData);
+        bytes memory executionData = abi.encode(singleExecData, opData);
+
+        // Fund the delegated user
+        vm.deal(address(delegatedAccount), 1 ether);
+
+        // Execute the transaction from unauthorized relayer should revert
+        vm.startPrank(unauthorizedRelayer);
+
+        // Expect revert with UnauthorizedExecution error since relayer check is part of signature validation
+        vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
+        delegatedAccount.execute(mode, executionData);
+
+        vm.stopPrank();
+
+        // Verify that it works when called by the authorized relayer
+        vm.startPrank(authorizedRelayer);
+
+        vm.expectEmit(true, true, true, true);
+        emit MockCallTarget.Called(userA, value, callData);
         delegatedAccount.execute(mode, executionData);
 
         vm.stopPrank();
@@ -823,7 +961,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory executionData = ERC7579Utils.encodeBatch(executionBatch);
 
         // Call from a different address (not the delegated EOA itself)
-        vm.startPrank(address(0xdead));
+        vm.startPrank(DEFAULT_RELAYER);
 
         // Execution should revert with UnauthorizedCaller error
         vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
@@ -860,7 +998,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.deal(address(delegatedAccount), 1 ether);
 
         // Execute the transaction from an unauthorized address without opData
-        vm.startPrank(address(0xdead)); // Use unauthorized address as the caller
+        vm.startPrank(DEFAULT_RELAYER);
 
         // It should revert with UnauthorizedCaller error when called without opData from third party
         vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
@@ -884,6 +1022,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Choose a nonce that would be invalidated by the attack
         uint256 targetNonce = 9999;
+        uint256 deadline = type(uint256).max;
 
         // Verify nonce is not used initially
         assertFalse(delegatedAccount.isNonceUsed(targetNonce), "Nonce should not be used initially");
@@ -892,11 +1031,38 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         Execution[] memory executionBatch = new Execution[](1);
         executionBatch[0] = Execution(address(0x1234), 0, "");
 
+        // Step 1: Calculate execution hashes for each call in the batch
+        bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
+        bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
+        for (uint256 i = 0; i < executionBatch.length; i++) {
+            executionHashes[i] = keccak256(
+                abi.encode(
+                    executionTypehash,
+                    executionBatch[i].target,
+                    executionBatch[i].value,
+                    keccak256(executionBatch[i].callData)
+                )
+            );
+        }
+        // Step 2: Create the batch hash
+        bytes memory encodedHashes = "";
+        for (uint256 i = 0; i < executionHashes.length; i++) {
+            encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
+        }
+        bytes32 executionsHash = keccak256(encodedHashes);
+        // Step 3: Create the final struct hash including the calls, deadline, mode, nonce and relayer
+        bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
+        );
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, targetNonce, DEFAULT_RELAYER));
+
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
         // Encode the batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        // Create opData with the target nonce but an invalid signature
-        bytes memory fakeSignature = new bytes(65);
-        bytes memory opData = abi.encodePacked(targetNonce, fakeSignature);
+        bytes memory opData = abi.encodePacked(targetNonce, deadline, signature);
         // Combine the execution data with opData
         bytes memory executionData = abi.encode(batchExecData, opData);
 
@@ -929,6 +1095,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Choose a nonce that would be invalidated by the attack
         uint256 targetNonce = 9999;
+        uint256 deadline = type(uint256).max;
 
         // Verify nonce is not used initially
         assertFalse(delegatedAccount.isNonceUsed(targetNonce), "Nonce should not be used initially");
@@ -937,11 +1104,38 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         Execution[] memory executionBatch = new Execution[](1);
         executionBatch[0] = Execution(address(0x1234), 0, "");
 
+        // Step 1: Calculate execution hashes for each call in the batch
+        bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
+        bytes32[] memory executionHashes = new bytes32[](executionBatch.length);
+        for (uint256 i = 0; i < executionBatch.length; i++) {
+            executionHashes[i] = keccak256(
+                abi.encode(
+                    executionTypehash,
+                    executionBatch[i].target,
+                    executionBatch[i].value,
+                    keccak256(executionBatch[i].callData)
+                )
+            );
+        }
+        // Step 2: Create the batch hash
+        bytes memory encodedHashes = "";
+        for (uint256 i = 0; i < executionHashes.length; i++) {
+            encodedHashes = abi.encodePacked(encodedHashes, executionHashes[i]);
+        }
+        bytes32 executionsHash = keccak256(encodedHashes);
+        // Step 3: Create the final struct hash including the calls, deadline, mode, nonce and relayer
+        bytes32 authorizationTypehash = keccak256(
+            // solhint-disable-next-line max-line-length
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
+        );
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, targetNonce, DEFAULT_RELAYER));
+
+        // Use helper function to create valid signature
+        bytes memory signature = _createValidSignature(structHash);
         // Encode the batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        // Create opData with the target nonce but an invalid signature
-        bytes memory fakeSignature = new bytes(65);
-        bytes memory opData = abi.encodePacked(targetNonce, fakeSignature);
+        bytes memory opData = abi.encodePacked(targetNonce, deadline, signature);
         // Combine the execution data with opData
         bytes memory executionData = abi.encode(batchExecData, opData);
 
@@ -1037,6 +1231,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Set up a nonce for the operation
         uint256 batchNonce = 1234;
+        // Sample signature deadline
+        uint256 deadline = block.timestamp + 1 hours;
 
         // Calculate execution hashes
         bytes32 executionTypehash = keccak256("Execution(address target,uint256 value,bytes data)");
@@ -1062,15 +1258,16 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Create the final struct hash
         bytes32 authorizationTypehash = keccak256(
             // solhint-disable-next-line max-line-length
-            "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+            "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
         );
-        bytes32 structHash = keccak256(abi.encode(authorizationTypehash, mode, executionsHash, batchNonce));
+        bytes32 structHash =
+            keccak256(abi.encode(authorizationTypehash, executionsHash, deadline, mode, batchNonce, DEFAULT_RELAYER));
 
         // Use helper function to create valid signature
         bytes memory signature = _createValidSignature(structHash);
 
-        // Encode opData (nonce + signature)
-        bytes memory opData = abi.encodePacked(batchNonce, signature);
+        // Encode opData (nonce + deadline + signature)
+        bytes memory opData = abi.encodePacked(batchNonce, deadline, signature);
 
         // Encode batch execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
@@ -1087,8 +1284,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         assertFalse(delegatedAccount.isNonceUsed(batchNonce), "Execution nonce should not be used initially");
         assertFalse(delegatedAccount.isNonceUsed(futureNonce), "Future nonce should not be used initially");
 
-        // Execute the transaction from any address (since we have valid signature)
-        vm.startPrank(address(0xdead));
+        // Execute the transaction from the commited relayer address
+        vm.startPrank(DEFAULT_RELAYER);
         delegatedAccount.execute(mode, executionData);
         vm.stopPrank();
 
