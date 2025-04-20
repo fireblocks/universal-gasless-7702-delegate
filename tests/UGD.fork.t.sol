@@ -45,7 +45,7 @@ contract UGDForkTest is Test, UniversalGaslessDelegationHelper {
     bytes32 private constant _EXECUTION_TYPEHASH = keccak256("Execution(address target,uint256 value,bytes data)");
     bytes32 private constant _EXECUTION_AUTHORIZATION_TYPEHASH = keccak256(
         // solhint-disable-next-line max-line-length
-        "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+        "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
     );
 
     // Execution mode for single call with authorization
@@ -121,16 +121,18 @@ contract UGDForkTest is Test, UniversalGaslessDelegationHelper {
         address target = USDC;
         uint256 value = 0; // No ETH value for ERC20 transfers
         uint256 nonce = 1;
-
+        // Add deadline and relayer parameters
+        uint256 deadline = block.timestamp + 1 hours;
+        address relayer = relayerForUser;
         // Calculate the EIP-712 typed data hash for signature
-        bytes32 digest = _hashTypedSingleExecutionAuth(target, value, callData, nonce);
+        bytes32 digest = _hashTypedSingleExecutionAuth(target, value, callData, nonce, deadline, relayer);
 
         // Sign with userA's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
         // Prepare execution data
         bytes memory singleExecData = abi.encodePacked(target, value, callData);
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
         bytes memory executionData = abi.encode(singleExecData, opData);
 
         // Check recipient's initial balance
@@ -159,7 +161,9 @@ contract UGDForkTest is Test, UniversalGaslessDelegationHelper {
         address target,
         uint256 value,
         bytes memory data,
-        uint256 nonce
+        uint256 nonce,
+        uint256 deadline,
+        address relayer
     )
         internal
         view
@@ -175,8 +179,11 @@ contract UGDForkTest is Test, UniversalGaslessDelegationHelper {
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
 
         // Create final struct hash
-        bytes32 structHash =
-            keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, SINGLE_CALL_AUTH_MODE, executionsHash, nonce));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _EXECUTION_AUTHORIZATION_TYPEHASH, executionsHash, deadline, SINGLE_CALL_AUTH_MODE, nonce, relayer
+            )
+        );
 
         // Return the EIP-712 typed data hash
         return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);

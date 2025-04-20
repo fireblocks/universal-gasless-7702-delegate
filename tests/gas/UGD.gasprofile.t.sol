@@ -42,13 +42,14 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
     address public relayerForUser;
     uint256 private relayerForUserPrivateKey;
     UniversalGaslessDelegate private delegatedAccount;
+    uint256 public deadline;
 
     // Constants for typed signatures
     bytes32 private constant _DOMAIN_TYPEHASH = keccak256("EIP712Domain(uint256 chainId,address verifyingContract)");
     bytes32 private constant _EXECUTION_TYPEHASH = keccak256("Execution(address target,uint256 value,bytes data)");
     bytes32 private constant _EXECUTION_AUTHORIZATION_TYPEHASH = keccak256(
         // solhint-disable-next-line max-line-length
-        "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
+        "AuthorizedExecutions(Execution[] calls,uint256 deadline,bytes32 mode,uint256 nonce,address relayer)Execution(address target,uint256 value,bytes data)"
     );
 
     // Execution modes
@@ -78,6 +79,7 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
 
         // Create UniversalGaslessDelegate
         gaslessDelegate = new UniversalGaslessDelegate(address(killswitchContract));
+        deadline = block.timestamp + 1 hours;
 
         // Set up delegation for userA to gaslessDelegate
         delegatedAccount =
@@ -105,7 +107,7 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
 
         // Prepare execution data
         bytes memory singleExecData = abi.encodePacked(target, value, callData);
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
         bytes memory executionData = abi.encode(singleExecData, opData);
 
         // Execute and measure gas
@@ -147,7 +149,7 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
 
         // Prepare execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
         bytes memory executionData = abi.encode(batchExecData, opData);
 
         // Execute and measure gas
@@ -172,7 +174,7 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
 
         // Prepare execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
         bytes memory executionData = abi.encode(batchExecData, opData);
 
         // Execute and measure gas
@@ -214,7 +216,7 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
 
         // Prepare execution data
         bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        bytes memory opData = abi.encodePacked(nonce, signature);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
         bytes memory executionData = abi.encode(batchExecData, opData);
 
         // Execute and measure gas
@@ -248,8 +250,16 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
         // Package as single item execution array hash
         bytes32 executionsHash = keccak256(abi.encodePacked(seHash));
         // Create final struct hash
-        bytes32 structHash =
-            keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, SINGLE_CALL_AUTH_MODE, executionsHash, nonce));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _EXECUTION_AUTHORIZATION_TYPEHASH,
+                executionsHash,
+                deadline,
+                SINGLE_CALL_AUTH_MODE,
+                nonce,
+                relayerForUser
+            )
+        );
 
         return _hashTypedData(structHash);
     }
@@ -271,8 +281,11 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
         bytes32 executionsHash = keccak256(encodedHashes);
 
         // Create final struct hash
-        bytes32 structHash =
-            keccak256(abi.encode(_EXECUTION_AUTHORIZATION_TYPEHASH, BATCH_CALL_AUTH_MODE, executionsHash, nonce));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _EXECUTION_AUTHORIZATION_TYPEHASH, executionsHash, deadline, BATCH_CALL_AUTH_MODE, nonce, relayerForUser
+            )
+        );
 
         return _hashTypedData(structHash);
     }
