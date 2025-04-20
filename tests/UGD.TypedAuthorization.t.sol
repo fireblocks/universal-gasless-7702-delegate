@@ -67,13 +67,13 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         assertEq(name, "", "Name should be empty");
         assertEq(version, "", "Version should be empty");
         assertEq(chainId, block.chainid, "ChainId should match current chain");
-        assertEq(verifyingContract, address(userA), "VerifyingContract should be the delegated account (userA)");
+        assertEq(verifyingContract, address(gaslessDelegate), "VerifyingContract should be the impl. address");
         assertEq(salt, bytes32(0), "Salt should be empty");
         assertEq(extensions.length, 0, "Extensions should be empty");
     }
 
     /**
-     * @notice Test that different delegated accounts have different domain separators
+     * @notice Test that different delegated accounts use the same implementation contract address
      */
     function test_Eip712Domain_DifferentDelegatedAccounts() public {
         // Create a second delegated account
@@ -92,10 +92,22 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         vm.prank(address(0));
         (,,,, address verifyingContractC,,) = delegatedAccountC.eip712Domain();
 
-        // Verify that the verifying contracts are different
-        assertEq(verifyingContractA, address(userA), "First account's verifying contract should be userA");
-        assertEq(verifyingContractC, address(userC), "Second account's verifying contract should be userC");
-        assertTrue(verifyingContractA != verifyingContractC, "Verifying contracts should be different");
+        // Verify that the verifying contracts are the same (both point to the implementation)
+        assertEq(
+            verifyingContractA,
+            address(gaslessDelegate),
+            "First account's verifying contract should be the implementation"
+        );
+        assertEq(
+            verifyingContractC,
+            address(gaslessDelegate),
+            "Second account's verifying contract should be the implementation"
+        );
+        assertEq(
+            verifyingContractA,
+            verifyingContractC,
+            "Verifying contracts should be the same for all accounts delegating to the same implementation"
+        );
     }
 
     /**
@@ -117,7 +129,15 @@ contract UGDTypedAuthorizationTest is Test, UniversalGaslessDelegationHelper {
         // Verify that the chain ID has changed but the verifying contract remains the same
         assertEq(originalChainId, block.chainid - 1, "Original chain ID should match initial chain ID");
         assertEq(newDomainChainId, newChainId, "New domain chain ID should match new chain ID");
-        assertEq(originalContract, address(userA), "Original verifying contract should be userA");
-        assertEq(newDomainContract, address(userA), "New domain verifying contract should still be userA");
+        assertEq(
+            originalContract,
+            address(gaslessDelegate),
+            "Original verifying contract should be the implementation contract"
+        );
+        assertEq(
+            newDomainContract,
+            address(gaslessDelegate),
+            "New domain verifying contract should still be the implementation contract"
+        );
     }
 }

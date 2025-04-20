@@ -19,6 +19,14 @@ contract TypedAuthorizationHarness is TypedAuthorization {
     // =============================================================
 
     /**
+     * @notice Implementation of the _verifyingContractAddress function
+     * @return The address of this contract to be used as the verifying contract
+     */
+    function _verifyingContractAddress() internal view virtual override returns (address) {
+        return address(this);
+    }
+
+    /**
      * @notice Exposes the internal _domainSeparatorV4 function
      * @return The domain separator for the current chain
      */
@@ -159,6 +167,43 @@ contract TypedAuthorizationTest is Test {
         // Verify that the new domain separator is calculated correctly
         assertEq(
             newDomainSeparator, expectedDomainSeparator, "Domain separator on new chain should match expected value"
+        );
+    }
+
+    /**
+     * @notice Test that the domain separator is:
+     * - different for different contract addresses, and
+     * - cached as long as the chain ID is the same
+     */
+    function test_DomainSeparator_DifferentAddressAndCache() public {
+        // Get the domain separator from the first harness
+        bytes32 separator = harness.exposed_domainSeparatorV4();
+
+        // Create a second instance
+        TypedAuthorizationHarness harness2 = new TypedAuthorizationHarness();
+        bytes32 secondHarnessSeparator = harness2.exposed_domainSeparatorV4();
+
+        // Assert that the domain separators are different due to different (deployed) contract addresses
+        assertTrue(
+            separator != secondHarnessSeparator,
+            "Domain separators should be different for different contract addresses"
+        );
+
+        // Change the chain ID
+        uint256 newChainId = block.chainid + 1;
+        vm.chainId(newChainId);
+        // Calculate the expected separator for the new chain ID on the first harness
+        bytes32 expectedNewSeparator = keccak256(abi.encode(DOMAIN_TYPEHASH, newChainId, address(harness)));
+
+        // Get the domain separator again from the first harness
+        bytes32 separatorNewChain = harness.exposed_domainSeparatorV4();
+        // It should be different now (cache miss, recalculation)
+        assertTrue(separator != separatorNewChain, "Domain separator should be recalculated for a different chain ID");
+
+        assertEq(
+            separatorNewChain,
+            expectedNewSeparator,
+            "New domain separator should match expected value after chain ID change"
         );
     }
 

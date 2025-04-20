@@ -22,7 +22,10 @@ import { Execution } from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol
  *
  * The implementation of the domain separator was designed to be as lean as possible, preserving only the chainId and
  * verifyingContract fields. It retains logic for properly updating the chain id to protect against replay attacks on
- * an eventual fork of the chain. This contract implements the version of the encoding known as "signTypedDataV4".
+ * an eventual fork of the chain. The verifyingContract to be used should be defined by deriving contracts, allowing
+ * for flexibility in the verification of EIP712 signatures. This is particularly useful in the context of EIP7702
+ * delegate contracts, where the verifyingContract may be the proxy contract itself or the implementation contract.
+ * This contract implements the version of the encoding known as "signTypedDataV4".
  *
  * This contract is derived from the OpenZeppelin Contracts implementation of EIP712 (utils/cryptography/EIP712.sol).
  */
@@ -53,6 +56,23 @@ abstract contract TypedAuthorization is IERC5267 {
         "AuthorizedExecutions(bytes32 mode,Execution[] calls,uint256 nonce)Execution(address target,uint256 value,bytes data)"
     );
 
+    // Cache the domain separator as an immutable value, but also store the chain id that it corresponds to, in order to
+    // invalidate the cached domain separator if the chain id changes.
+    bytes32 private immutable _cachedDomainSeparator; // solhint-disable-line immutable-vars-naming
+    uint256 private immutable _cachedChainId; // solhint-disable-line immutable-vars-naming
+
+    // =============================================================
+    //                         CONSTRUCTOR
+    // =============================================================
+
+    /**
+     * @notice Initializes the EIP712 domain separator cache using an internally defined verifying-contract address
+     */
+    constructor() {
+        _cachedChainId = block.chainid;
+        _cachedDomainSeparator = _buildDomainSeparator();
+    }
+
     // =============================================================
     //                      PUBLIC FUNCTIONS
     // =============================================================
@@ -79,7 +99,7 @@ abstract contract TypedAuthorization is IERC5267 {
             string(""), // empty name
             string(""), // empty version
             block.chainid,
-            address(this),
+            _verifyingContractAddress(),
             bytes32(0), // empty salt
             new uint256[](0)
         );
@@ -90,12 +110,22 @@ abstract contract TypedAuthorization is IERC5267 {
     // =============================================================
 
     /**
-     * @notice Returns the domain separator for the current chain
-     * @dev Always recalculates the domain separator to support proxy accounts
+     * @notice Returns the domain separator for the current chain.
+     * @dev Returns the cached separator if the chain id hasn't changed, otherwise rebuilds it.
      * @return domainSeparator The domain separator bytes32 value
      */
     function _domainSeparatorV4() internal view returns (bytes32 domainSeparator) {
-        return keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, address(this)));
+        // Use cached value if chainId matches, otherwise rebuild
+        return block.chainid == _cachedChainId ? _cachedDomainSeparator : _buildDomainSeparator();
+    }
+
+    /**
+     * @notice Builds the EIP712 domain separator using the current chain ID and the implementation-specific address
+     *         as the verifying contract.
+     * @return domainSeparator The domain separator bytes32 value
+     */
+    function _buildDomainSeparator() private view returns (bytes32 domainSeparator) {
+        return keccak256(abi.encode(_DOMAIN_TYPEHASH, block.chainid, _verifyingContractAddress()));
     }
 
     /**
@@ -176,4 +206,12 @@ abstract contract TypedAuthorization is IERC5267 {
 
         return _hashTypedDataV4(structHash);
     }
+
+    /**
+     * @notice This function determines the address of the verifying contract to be used in the EIP712 domain separator
+     * @dev This function must be overridden by the deriving contract to provide the appropriate contract address,
+     *      which could be the address of the implementation contract or the proxy contract.
+     * @return verifyingContract The address of the verifying contract
+     */
+    function _verifyingContractAddress() internal view virtual returns (address verifyingContract);
 }
