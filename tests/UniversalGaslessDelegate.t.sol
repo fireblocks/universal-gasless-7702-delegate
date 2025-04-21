@@ -1001,6 +1001,36 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         vm.stopPrank();
     }
 
+    /**
+     * @notice Test verifying that calls to the fallback function (with calldata < 4 bytes) are blocked
+     * @dev Tests that self-calls with short calldata that would trigger the fallback function are properly prevented
+     */
+    function test_RevertWhen_ShortCalldataToSelf() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+
+        // Create a batch execution with a call to self using 3 bytes of data (would trigger fallback)
+        Execution[] memory executionBatch = new Execution[](1);
+        bytes memory shortCalldata = hex"aabbcc"; // Only 3 bytes
+        executionBatch[0] = Execution(address(delegatedAccount), 0, shortCalldata);
+
+        // Verify the calldata length
+        assertEq(shortCalldata.length, 3, "Calldata should be 3 bytes");
+
+        // Encode the batch for execution
+        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
+
+        // Set up batch mode for self-call
+        bytes32 batchCallSelfMode = bytes32(0x0100000000000000000000000000000000000000000000000000000000000000);
+
+        // Execute the call from the EOA itself (self-call)
+        vm.startPrank(address(delegatedAccount));
+        // This should revert since short calldata to self is now blocked
+        vm.expectRevert(LibErrors.ReentrantCall.selector);
+        delegatedAccount.execute(batchCallSelfMode, batchExecData);
+        vm.stopPrank();
+    }
+
     function test_execute_invalidateNonce_withValidSignature() public {
         // First verify the account is properly delegated
         assertDelegated(address(delegatedAccount), address(gaslessDelegate));

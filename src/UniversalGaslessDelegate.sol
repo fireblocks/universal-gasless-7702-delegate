@@ -422,8 +422,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @dev Performs a low-level call to the target contract and verifies the result.
      *
      * Note: This function prevents reentrancy when the target is the Delegated EOA. Following a whitelist pattern,
-     * the only function selector allowed in this situation is the `invalidateNonce` function. If any other function,
-     * for example `execute`, is called, it will revert with a `ReentrantCall` error.
+     * the only function selector allowed in this situation is the `invalidateNonce` function. If any other function
+     * is called (e.g. `execute` or fallback), it will revert with a `ReentrantCall` error.
      *
      * Calling Conditions:
      *
@@ -436,8 +436,12 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      */
     function _call(address target, uint256 value, bytes calldata data) internal returns (bytes memory) {
         // Reject any calls to self that are not the invalidateNonce function
-        if (target == address(this) && data.length >= 4 && bytes4(data[:4]) != this.invalidateNonce.selector) {
-            revert LibErrors.ReentrantCall();
+        if (target == address(this)) {
+            if (data.length >= 4 && bytes4(data[:4]) == this.invalidateNonce.selector) {
+                // Allow only if the call is explicitly to invalidateNonce - no revert
+            } else {
+                revert LibErrors.ReentrantCall();
+            }
         }
         (bool success, bytes memory returndata) = target.call{ value: value }(data);
         return Address.verifyCallResult(success, returndata);
