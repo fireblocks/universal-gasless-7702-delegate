@@ -57,7 +57,7 @@ contract UniversalGaslessDelegateHarness is UniversalGaslessDelegate {
     /**
      * @notice Expose internal function for testing call execution
      */
-    function exposed_call(address target, uint256 value, bytes calldata data) external returns (bytes memory) {
+    function exposed_call(address target, uint256 value, bytes calldata data) external {
         return _call(target, value, data);
     }
 }
@@ -309,13 +309,9 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         vm.deal(address(harness), 1 ether);
 
         // Execute the call through harness
-        bytes memory returnData = harness.exposed_call(address(target), callValue, callData);
-
-        // Decode the return data
-        uint256 returnedValue = abi.decode(returnData, (uint256));
+        harness.exposed_call(address(target), callValue, callData);
 
         // Verify results
-        assertEq(returnedValue, 42, "Call should return the correct value");
         assertEq(target.storedValue(), callValue, "Target should receive the ETH value");
         assertEq(target.receivedValue(), callValue, "Target should record the correct received value");
         assertEq(address(target).balance, callValue, "Target balance should be updated");
@@ -336,10 +332,9 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         vm.deal(address(harness), 1 ether);
 
         // Execute the call through harness
-        bytes memory returnData = harness.exposed_call(address(target), callValue, callData);
+        harness.exposed_call(address(target), callValue, callData);
 
         // Verify results
-        assertEq(returnData.length, 0, "Return data should be empty");
         assertEq(target.storedValue(), callValue, "Target should receive the ETH value");
         assertEq(target.receivedValue(), callValue, "Target should record the correct received value");
         assertEq(address(target).balance, callValue, "Target balance should be updated");
@@ -365,10 +360,9 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         vm.deal(address(harness), 1 ether);
 
         // Execute the call through harness - should succeed
-        bytes memory returnData = harness.exposed_call(nonContract, callValue, callData);
+        harness.exposed_call(nonContract, callValue, callData);
 
         // Verify results
-        assertEq(returnData.length, 0, "Return data should be empty");
         assertEq(nonContract.balance, initialBalance + callValue, "Recipient should receive the ETH");
     }
 
@@ -383,11 +377,16 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes memory callData = hex"deadbeef";
         uint256 callValue = 0; // No value
 
-        // Execute the call through harness - should not revert with zero value
-        bytes memory returnData = harness.exposed_call(nonContract, callValue, callData);
+        // This call should not revert
+        bool callFailed = false;
+        try harness.exposed_call(nonContract, callValue, callData) {
+            // Call succeeded
+        } catch {
+            callFailed = true;
+        }
 
-        // Verify return data is empty
-        assertEq(returnData.length, 0, "Return data should be empty");
+        // Assert that the call was successful
+        assertTrue(!callFailed, "Call to non-contract address with zero value should not revert");
     }
 
     /**
@@ -408,10 +407,9 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         vm.deal(address(harness), 1 ether);
 
         // Execute the call through harness - should succeed with empty calldata
-        bytes memory returnData = harness.exposed_call(recipient, callValue, callData);
+        harness.exposed_call(recipient, callValue, callData);
 
         // Verify results
-        assertEq(returnData.length, 0, "Return data should be empty");
         assertEq(recipient.balance, initialBalance + callValue, "Recipient should receive the ETH");
     }
 
