@@ -440,15 +440,14 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @param target The address of the contract to call
      * @param value The amount of ETH to send with the call
      * @param data The calldata to send to the target
-     * @return The returndata from the call if successful
      */
-    function _call(address target, uint256 value, bytes calldata data) internal returns (bytes memory) {
+    function _call(address target, uint256 value, bytes calldata data) internal {
         // Reject any calls to self that are not the invalidateNonce function
         if (target == address(this) && data.length >= 4 && bytes4(data[:4]) != this.invalidateNonce.selector) {
             revert LibErrors.ReentrantCall();
         }
         (bool success, bytes memory returndata) = target.call{ value: value }(data);
-        return Address.verifyCallResult(success, returndata);
+        Address.verifyCallResult(success, returndata);
     }
 
     /**
