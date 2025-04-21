@@ -21,7 +21,7 @@ contract UniversalGaslessDelegateHarness is UniversalGaslessDelegate {
     /**
      * @notice Expose internal function for testing
      */
-    function exposed_executionModeId(bytes32 mode) external pure returns (uint8) {
+    function exposed_executionModeId(bytes32 mode) external pure returns (ExecutionModeId) {
         return _executionModeId(mode);
     }
 
@@ -96,14 +96,14 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         bytes32 supportedMode3 = bytes32(uint256(0x01000000000000000000) << 8 * 22);
 
         // Call the exposed internal function for all supported modes
-        uint8 modeId1 = harness.exposed_executionModeId(supportedMode1);
-        uint8 modeId2 = harness.exposed_executionModeId(supportedMode2);
-        uint8 modeId3 = harness.exposed_executionModeId(supportedMode3);
+        UniversalGaslessDelegate.ExecutionModeId modeId1 = harness.exposed_executionModeId(supportedMode1);
+        UniversalGaslessDelegate.ExecutionModeId modeId2 = harness.exposed_executionModeId(supportedMode2);
+        UniversalGaslessDelegate.ExecutionModeId modeId3 = harness.exposed_executionModeId(supportedMode3);
 
         // Verify the mode IDs are correct
-        assertEq(modeId1, 1, "Mode 1 (Single call with Auth) should return ID 1");
-        assertEq(modeId2, 2, "Mode 2 (Batch call with Auth) should return ID 2");
-        assertEq(modeId3, 3, "Mode 3 (Batch call with Default) should return ID 3");
+        assertEq(uint8(modeId1), 1, "Mode 1 (Single call with Auth) should return ID 1");
+        assertEq(uint8(modeId2), 2, "Mode 2 (Batch call with Auth) should return ID 2");
+        assertEq(uint8(modeId3), 3, "Mode 3 (Batch call with Default) should return ID 3");
     }
 
     /**
@@ -117,14 +117,14 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
             // (0x12345678)
 
         // Test each unsupported mode
-        uint8 modeId1 = harness.exposed_executionModeId(unsupportedMode1);
-        uint8 modeId2 = harness.exposed_executionModeId(unsupportedMode2);
-        uint8 modeId3 = harness.exposed_executionModeId(unsupportedMode3);
+        UniversalGaslessDelegate.ExecutionModeId modeId1 = harness.exposed_executionModeId(unsupportedMode1);
+        UniversalGaslessDelegate.ExecutionModeId modeId2 = harness.exposed_executionModeId(unsupportedMode2);
+        UniversalGaslessDelegate.ExecutionModeId modeId3 = harness.exposed_executionModeId(unsupportedMode3);
 
-        // Verify all unsupported modes return 0
-        assertEq(modeId1, 0, "Unsupported mode 1 should return ID 0");
-        assertEq(modeId2, 0, "Unsupported mode 2 should return ID 0");
-        assertEq(modeId3, 0, "Unsupported mode 3 should return ID 0");
+        // Verify all unsupported modes return ExecutionModeId.INVALID (0)
+        assertEq(uint8(modeId1), 0, "Unsupported mode 1 should return ExecutionModeId.INVALID");
+        assertEq(uint8(modeId2), 0, "Unsupported mode 2 should return ExecutionModeId.INVALID");
+        assertEq(uint8(modeId3), 0, "Unsupported mode 3 should return ExecutionModeId.INVALID");
     }
 
     /**

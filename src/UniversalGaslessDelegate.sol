@@ -67,28 +67,25 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     IKillSwitch private immutable _KILLSWITCH_CONTRACT;
 
     /**
-     * @notice Internal identifier for handling a single call with opData authorization mode
-     * @dev This corresponds to CallType = Single (0x00), ExecType = Revert (0x00),
-     *      ModeSelector = Auth via opData (0x78210001)
-     */
-    uint8 internal constant SINGLE_CALL_OPDATA_AUTH = 1;
-
-    /**
-     * @notice Internal identifier for handling a batch call with opData authorization mode
-     * @dev This corresponds to CallType = Batch (0x01), ExecType = Revert (0x00),
-     *      ModeSelector = Auth via opData (0x78210001)
-     */
-    uint8 internal constant BATCH_CALL_OPDATA_AUTH = 2;
-
-    /**
-     * @notice Internal identifier for handling a batch call with self-call authorization mode
-     * @dev This corresponds to CallType = Batch (0x01), ExecType = Revert (0x00),
-     *     ModeSelector = Default (0x00000000)
+     * @notice Enumeration of the different execution modes supported by the contract
+     * @dev These values correspond to the execution modes defined in {supportsExecutionMode}, with INVALID as the
+     *      default 0 state
      *
-     * Used for a batch call execution mode where execution authorization is implied by requiring the caller to
-     * be the account itself.
+     * - INVALID: Represents an invalid/unsupported execution mode (0)
+     * - SINGLE_CALL_OPDATA_AUTH: Single call with authorization via opData (1)
+     * - BATCH_CALL_OPDATA_AUTH: Batch call with authorization via optional opData (2)
+     * - BATCH_CALL: Batch call with self-call authorization (3)
      */
-    uint8 internal constant BATCH_CALL = 3;
+    enum ExecutionModeId {
+        // 0: Invalid mode
+        INVALID,
+        // 1: CallType = Single (0x00), ExecType = Revert (0x00), ModeSelector = Auth via opData (0x78210001)
+        SINGLE_CALL_OPDATA_AUTH,
+        // 2: CallType = Batch (0x01), ExecType = Revert (0x00), ModeSelector = Auth via opData (0x78210001)
+        BATCH_CALL_OPDATA_AUTH,
+        // 3: CallType = Batch (0x01), ExecType = Revert (0x00), ModeSelector = Default (0x00000000)
+        BATCH_CALL
+    }
 
     // =============================================================
     //                          STATE STORAGE
@@ -239,9 +236,9 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      */
     function execute(bytes32 mode, bytes calldata executionData) external payable whenNotPaused onlyProxy {
         // Decode the execution data according to the mode
-        uint8 modeId = _executionModeId(mode);
+        ExecutionModeId modeId = _executionModeId(mode);
         // Revert if mode is not supported
-        if (modeId == 0) _determineExecutionModeRevertCause(mode);
+        if (modeId == ExecutionModeId.INVALID) _determineExecutionModeRevertCause(mode);
 
         bytes calldata sobExecutionData;
         bytes calldata opData;
@@ -254,7 +251,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
             require(block.timestamp <= deadline, LibErrors.ExpiredSignature(deadline));
             // irrespective of single or batch, the nonce is always used on modes with opData auth
             _useUnorderedNonce(nonce);
-            if (modeId == SINGLE_CALL_OPDATA_AUTH) {
+            if (modeId == ExecutionModeId.SINGLE_CALL_OPDATA_AUTH) {
                 // Perform authentication using opData and execute single call
                 (address target, uint256 value, bytes calldata callData) = ERC7579Utils.decodeSingle(sobExecutionData);
                 // create AuthorizedExecutions EIP712 hash
@@ -266,7 +263,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
                 _call(target, value, callData);
                 return;
             }
-            if (modeId == BATCH_CALL_OPDATA_AUTH) {
+            if (modeId == ExecutionModeId.BATCH_CALL_OPDATA_AUTH) {
                 // Perform authentication using opData and execute batch calls
                 Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(sobExecutionData);
                 // create AuthorizedExecutions EIP712 hash
@@ -279,11 +276,11 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
                 return;
             }
             // BATCH_CALL mode does not support an opData component
-            if (modeId == BATCH_CALL) revert LibErrors.UnauthorizedExecution();
+            if (modeId == ExecutionModeId.BATCH_CALL) revert LibErrors.UnauthorizedExecution();
         } else {
             require(msg.sender == address(this), LibErrors.UnauthorizedCaller());
             // For mode SINGLE_CALL_OPDATA_AUTH, opData is required for authorization
-            if (modeId == SINGLE_CALL_OPDATA_AUTH) revert LibErrors.UnauthorizedExecution();
+            if (modeId == ExecutionModeId.SINGLE_CALL_OPDATA_AUTH) revert LibErrors.UnauthorizedExecution();
             // Evaluate modes BATCH_CALL_OPDATA_AUTH  and BATCH_CALL under no opData, self-call authorization
             Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(executionData);
             // Execute the batch calls
@@ -397,7 +394,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @return isSupported True if the mode is supported, false otherwise
      */
     function supportsExecutionMode(bytes32 mode) external pure returns (bool isSupported) {
-        return _executionModeId(mode) != 0;
+        return _executionModeId(mode) != ExecutionModeId.INVALID;
     }
 
     /**
@@ -470,31 +467,32 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
 
     /**
      * @notice Identifies the type of execution mode
-     * @dev Analyzes the execution mode and returns an identifier that indicates support:
-     *      - Returns 0 if the mode is not supported
-     *      - Returns SINGLE_CALL_OPDATA_AUTH for CallType = Single (0x00), ExecType = Revert on failure (0x00),
-     *        Unused = EMPTY, ModeSelector = Authorization via **required** `opData` (0x78210001), ModePayload = ANY
-     *      - Returns BATCH_CALL_OPDATA_AUTH for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
-     *        Unused = EMPTY, ModeSelector = Authorization via optional `opData` (0x78210001), ModePayload = ANY
-     *      - Returns BATCH_CALL for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
+     * @dev Analyzes the execution mode and returns the {ExecutionModeId} identifier:
+     *
+     * - INVALID if the mode is not supported
+     * - SINGLE_CALL_OPDATA_AUTH for CallType = Single (0x00), ExecType = Revert on failure (0x00),
+     *   Unused = EMPTY, ModeSelector = Authorization via **required** `opData` (0x78210001), ModePayload = ANY
+     * - BATCH_CALL_OPDATA_AUTH for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
+     *   Unused = EMPTY, ModeSelector = Authorization via optional `opData` (0x78210001), ModePayload = ANY
+     * - BATCH_CALL for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
      *        Unused = EMPTY, ModeSelector = Default (0x00000000), ModePayload = ANY
      *
      * @param mode The execution mode to analyze
-     * @return modeId An identifier for the execution mode type (0 = unsupported)
+     * @return The enum value representing the execution mode type/identifier
      */
-    function _executionModeId(bytes32 mode) internal pure returns (uint8 modeId) {
+    function _executionModeId(bytes32 mode) internal pure returns (ExecutionModeId) {
         // Check if the mode is supported. Only checks the first 10 bytes of the mode
         bytes10 execModeMinusPayload = bytes10(mode);
         if (execModeMinusPayload == bytes10(0x00000000000078210001)) {
-            return SINGLE_CALL_OPDATA_AUTH;
+            return ExecutionModeId.SINGLE_CALL_OPDATA_AUTH;
         }
         if (execModeMinusPayload == bytes10(0x01000000000078210001)) {
-            return BATCH_CALL_OPDATA_AUTH;
+            return ExecutionModeId.BATCH_CALL_OPDATA_AUTH;
         }
         if (execModeMinusPayload == bytes10(0x01000000000000000000)) {
-            return BATCH_CALL;
+            return ExecutionModeId.BATCH_CALL;
         }
-        return 0;
+        return ExecutionModeId.INVALID;
     }
 
     /**
