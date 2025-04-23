@@ -304,21 +304,21 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *
      * @param nonce The nonce to invalidate
      */
-    function invalidateNonce(uint256 nonce) external virtual override onlyProxy onlySelf {
+    function invalidateNonce(uint256 nonce) external override onlyProxy onlySelf {
         _useUnorderedNonce(nonce);
     }
 
     /**
      * @inheritdoc NonceBitmap
      */
-    function getNonceBitmap(uint248 wordPos) public view virtual override onlyProxy returns (uint256 bitmap) {
+    function getNonceBitmap(uint248 wordPos) public view override onlyProxy returns (uint256 bitmap) {
         return super.getNonceBitmap(wordPos);
     }
 
     /**
      * @inheritdoc NonceBitmap
      */
-    function isNonceUsed(uint256 nonce) public view virtual override onlyProxy returns (bool isUsed) {
+    function isNonceUsed(uint256 nonce) public view override onlyProxy returns (bool isUsed) {
         return super.isNonceUsed(nonce);
     }
 
@@ -417,7 +417,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *   - the {IERC1155Receiver} interface id (checked in ERC1155Holder)
      *   - the {IERC165} interface id (checked in ERC1155Holder -> ERC165)
      */
-    function supportsInterface(bytes4 interfaceId) public view virtual override onlyProxy returns (bool isSupported) {
+    function supportsInterface(bytes4 interfaceId) public view override onlyProxy returns (bool isSupported) {
         return interfaceId == type(IERC7821).interfaceId || interfaceId == type(IERC1271).interfaceId
             || super.supportsInterface(interfaceId);
     }
@@ -644,15 +644,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @param _signature A 65-byte ECDSA signature produced by the signer
      * @return isValid true if the signature is valid, false otherwise
      */
-    function _isValidRawSignature(
-        bytes32 _hash,
-        bytes calldata _signature
-    )
-        internal
-        view
-        virtual
-        returns (bool isValid)
-    {
+    function _isValidRawSignature(bytes32 _hash, bytes calldata _signature) internal view returns (bool isValid) {
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(_hash, _signature);
         return address(this) == recovered && err == ECDSA.RecoverError.NoError;
     }
@@ -663,7 +655,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @custom:storage-location erc7201:fireblocks.global.security.nonces
      * @return $ The reference to the {NonceStorage} struct in storage
      */
-    function _nonceStorage() internal pure virtual override returns (NonceStorage storage $) {
+    function _nonceStorage() internal pure override returns (NonceStorage storage $) {
         assembly ("memory-safe") {
             $.slot := _NONCE_STORAGE_LOCATION
         }
@@ -675,7 +667,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *      replay attacks if an EOA re-delegates to a different implementation.
      * @return verifyingContract The address of the implementation contract
      */
-    function _verifyingContractAddress() internal view virtual override returns (address verifyingContract) {
+    function _verifyingContractAddress() internal view override returns (address verifyingContract) {
         // During the construction phase, the value of `__implementation` might be empty, which is not a valid
         // verifying contract. Therefore, we coalesce to the eventual implementation address.
         return __implementation == address(0) ? address(this) : __implementation;
