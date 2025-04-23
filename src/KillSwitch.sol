@@ -69,7 +69,7 @@ contract KillSwitch is IKillSwitch, Ownable, Pausable {
      * @dev This view function can be called by any address at any time
      * @return isPausedState True if the contract is paused, false otherwise
      */
-    function paused() public view virtual override(IKillSwitch, Pausable) returns (bool isPausedState) {
+    function paused() public view override(IKillSwitch, Pausable) returns (bool isPausedState) {
         return super.paused();
     }
 }
