@@ -34,7 +34,7 @@ library LibErrors {
     error InvalidNonce();
 
     /**
-     * @notice This error indicates that a address provided does not implement a required interface.
+     * @notice This error indicates that an address provided does not implement a required interface.
      * @dev Indicates that a contract does not implement a required interface.
      */
     error InvalidImplementation();

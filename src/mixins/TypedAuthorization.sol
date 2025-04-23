@@ -9,7 +9,9 @@ import { Execution } from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol
 
 /**
  * @title Typed Structured Execution Authorization
- * @notice Implementation of EIP712 with the purpose of hashing typed structured data ... etc
+ * @notice Implementation of EIP712 that provides structured hashing functions for typed data in the context of
+ *         meta-transactions. This contract computes the message digests that off-chain wallets must sign to
+ *         authorize executions through the EIP-7702 delegate contract, supporting batch operations out of the box.
  *
  * This contract is an implementation of EIP-712 with select elements being part of the EIP712Domain
  *
@@ -23,11 +25,11 @@ import { Execution } from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol
  * The implementation of the domain separator was designed to be as lean as possible, preserving only the chainId and
  * verifyingContract fields. It retains logic for properly updating the chain id to protect against replay attacks on
  * an eventual fork of the chain. The verifyingContract to be used should be defined by deriving contracts, allowing
- * for flexibility in the verification of EIP712 signatures. This is particularly useful in the context of EIP7702
+ * for flexibility in the verification of EIP-712 signatures. This is particularly useful in the context of EIP-7702
  * delegate contracts, where the verifyingContract may be the proxy contract itself or the implementation contract.
  * This contract implements the version of the encoding known as "signTypedDataV4".
  *
- * This contract is derived from the OpenZeppelin Contracts implementation of EIP712 (utils/cryptography/EIP712.sol).
+ * This contract is derived from the OpenZeppelin Contracts implementation of EIP-712 (utils/cryptography/EIP712.sol).
  *
  * @custom:security-contact support@fireblocks.com
  */

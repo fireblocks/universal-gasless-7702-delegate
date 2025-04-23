@@ -27,7 +27,7 @@ import { IKillSwitch } from "./interface/IKillSwitch.sol";
  *         contract implements a pattern where logic can execute on behalf of users who have signed authorized payload.
  *
  * @dev Implements flexible standards such as EIP-7821 to enhance the EOA experience with contract functionality. It
- *      allows third partides to submit transactions for execution on behalf of users (i.e. gasless operations), as
+ *      allows third parties to submit transactions for execution on behalf of users (i.e. gasless operations), as
  *      long as users have provided the necessary authorization.
  *
  * Core Features:
@@ -560,8 +560,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @notice Extracts single/batch execution data and optional opData from `executionData`
      * @dev Decodes executionData to separate the call(s) from the optional `opData` according to EIP-7821.
      *
-     * The function determines if opData is present by examining the offset values. Here, we perform low-level
-     * ABI-decoding of dynamic types with the intent of:
+     * Here, we perform low-level ABI-decoding of dynamic types with the intent of:
      *   - gracefully handling structural errors that otherwise would result in a generic revert
      *   - maintaining calldata references
      *
