@@ -145,9 +145,8 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Prepare execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
         bytes memory opData = abi.encodePacked(nonce, deadline, signature);
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Execute and measure gas
         vm.startPrank(relayerForUser);
@@ -170,9 +169,8 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Prepare execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
         bytes memory opData = abi.encodePacked(nonce, deadline, signature);
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Execute and measure gas
         vm.startPrank(relayerForUser);
@@ -212,9 +210,8 @@ abstract contract UGDGasProfileTest is Test, UniversalGaslessDelegationHelper {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Prepare execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
         bytes memory opData = abi.encodePacked(nonce, deadline, signature);
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Execute and measure gas
         vm.startPrank(relayerForUser);

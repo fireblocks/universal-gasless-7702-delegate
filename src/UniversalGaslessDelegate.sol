@@ -242,52 +242,65 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
         // Revert if mode is not supported
         if (modeId == ExecutionModeId.INVALID) _determineExecutionModeRevertCause(mode);
 
-        bytes calldata sobExecutionData;
         bytes calldata opData;
-        (sobExecutionData, opData) = _extractExecAndOpData(executionData);
-        // Check if optional opData is present. If not, we rely on the caller being the Delegated EOA itself for auth
-        if (opData.length != 0) {
+        if (modeId == ExecutionModeId.SINGLE_CALL_OPDATA_AUTH) {
+            bytes calldata singleExecutionData;
+            (singleExecutionData, opData) = _extractSingleExecAndOpData(executionData);
+            require(opData.length != 0, LibErrors.UnauthorizedExecution());
+
             // Decode opData to extract nonce, deadline and signature
             (uint256 nonce, uint256 deadline, bytes calldata signature) = _decodeOpData(opData);
             // Check if signature has expired
             require(block.timestamp <= deadline, LibErrors.ExpiredSignature(deadline));
-            // irrespective of single or batch, the nonce is always used on modes with opData auth
+            // Use the nonce
             _useUnorderedNonce(nonce);
-            if (modeId == ExecutionModeId.SINGLE_CALL_OPDATA_AUTH) {
-                // Perform authentication using opData and execute single call
-                (address target, uint256 value, bytes calldata callData) = ERC7579Utils.decodeSingle(sobExecutionData);
-                // create AuthorizedExecutions EIP712 hash
-                bytes32 sDigest =
-                    _hashTypedSingleExecutionAuthorization(mode, target, value, callData, nonce, deadline, msg.sender);
-                //validate signature
-                require(address(this) == ECDSA.recover(sDigest, signature), LibErrors.UnauthorizedExecution());
-                // Execute the call
-                _call(target, value, callData);
-                return;
-            }
-            if (modeId == ExecutionModeId.BATCH_CALL_OPDATA_AUTH) {
-                // Perform authentication using opData and execute batch calls
-                Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(sobExecutionData);
-                // create AuthorizedExecutions EIP712 hash
-                bytes32 bDigest =
-                    _hashTypedBatchExecutionAuthorization(mode, executionBatch, nonce, deadline, msg.sender);
-                //validate signature
-                require(address(this) == ECDSA.recover(bDigest, signature), LibErrors.UnauthorizedExecution());
-                // Execute the batch calls
-                _execBatch(executionBatch);
-                return;
-            }
+
+            // Decode single execution from packed data
+            (address target, uint256 value, bytes calldata callData) = ERC7579Utils.decodeSingle(singleExecutionData);
+
+            // Create AuthorizedExecutions EIP712 hash and verify signature
+            bytes32 sDigest =
+                _hashTypedSingleExecutionAuthorization(mode, target, value, callData, nonce, deadline, msg.sender);
+            require(address(this) == ECDSA.recover(sDigest, signature), LibErrors.UnauthorizedExecution());
+
+            // Execute the call
+            _call(target, value, callData);
+            return;
+        }
+
+        // Handle batch modes (BATCH_CALL_OPDATA_AUTH and BATCH_CALL)
+        bytes calldata batchExecutionData;
+        (batchExecutionData, opData) = _extractBatchExecAndOpData(executionData);
+
+        if (opData.length != 0) {
+            // BATCH_CALL_OPDATA_AUTH with opData
             // BATCH_CALL mode does not support an opData component
             if (modeId == ExecutionModeId.BATCH_CALL) revert LibErrors.UnauthorizedExecution();
-        } else {
-            require(msg.sender == address(this), LibErrors.UnauthorizedCaller());
-            // For mode SINGLE_CALL_OPDATA_AUTH, opData is required for authorization
-            if (modeId == ExecutionModeId.SINGLE_CALL_OPDATA_AUTH) revert LibErrors.UnauthorizedExecution();
-            // Evaluate modes BATCH_CALL_OPDATA_AUTH  and BATCH_CALL under no opData, self-call authorization
-            Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(executionData);
+
+            // Decode opData to extract nonce, deadline and signature
+            (uint256 nonce, uint256 deadline, bytes calldata signature) = _decodeOpData(opData);
+            // Check if signature has expired
+            require(block.timestamp <= deadline, LibErrors.ExpiredSignature(deadline));
+            // Use the nonce
+            _useUnorderedNonce(nonce);
+
+            // Decode batch execution data
+            Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(batchExecutionData);
+
+            // Create AuthorizedExecutions EIP712 hash and verify signature
+            bytes32 bDigest = _hashTypedBatchExecutionAuthorization(mode, executionBatch, nonce, deadline, msg.sender);
+            require(address(this) == ECDSA.recover(bDigest, signature), LibErrors.UnauthorizedExecution());
+
             // Execute the batch calls
             _execBatch(executionBatch);
-            return;
+        } else {
+            // BATCH_CALL or BATCH_CALL_OPDATA_AUTH without opData (self-call)
+            require(msg.sender == address(this), LibErrors.UnauthorizedCaller());
+
+            // Decode batch execution data directly from executionData
+            Execution[] calldata executionBatch = ERC7579Utils.decodeBatch(batchExecutionData);
+            // Execute the batch calls
+            _execBatch(executionBatch);
         }
     }
 
@@ -557,31 +570,27 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     }
 
     /**
-     * @notice Extracts single/batch execution data and optional opData from `executionData`
-     * @dev Decodes executionData to separate the call(s) from the optional `opData` according to EIP-7821.
+     * @notice Extracts execution data for batch operations (with or without opData)
+     * @dev Decodes executionData to separate the calls from the optional `opData`. Handles BATCH_CALL_OPDATA_AUTH
+     *      and BATCH_CALL modes.
      *
-     * Here, we perform low-level ABI-decoding of dynamic types with the intent of:
+     * For batch calls, the expected encoding follows EIP-7821:
+     * - Without opData: abi.encode(calls) where calls is Execution[]
+     * - With opData: abi.encode(calls, opData) where both are at the same encoding level
+     *
+     * Here, we perform low-level ABI-decoding with the intent of:
      *   - gracefully handling structural errors that otherwise would result in a generic revert
      *   - maintaining calldata references
      *
-     * The function determines if opData is present by examining the offset values:
-     * - If only one dynamic type is present, only `singleOrBatchExecutionData` will be relevant, as `opData` is
-     *   set to empty
-     * - If two dynamic typed values are present, both execution data and opData are extracted
-     *
-     * Reverts:
-     * - with {LibErrors.ExecutionDataExtractionError} if offsets are invalid
-     *
      * @param executionData The encoded execution data passed to execute()
-     * @return singleOrBatchExecutionData The extracted singleOrBatchExecutionData data
+     * @return batchExecutionData The extracted batch execution data (includes pointer to array)
      * @return opData The extracted operation data (empty if not provided)
      */
-    function _extractExecAndOpData(bytes calldata executionData)
+    function _extractBatchExecAndOpData(bytes calldata executionData)
         internal
         pure
-        returns (bytes calldata singleOrBatchExecutionData, bytes calldata opData)
+        returns (bytes calldata batchExecutionData, bytes calldata opData)
     {
-        // Read the primary offset in a local variable first
         uint256 cOffset;
         assembly {
             cOffset := calldataload(executionData.offset)
@@ -589,30 +598,98 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
 
         if (cOffset < 32) revert LibErrors.ExecutionDataExtractionError();
 
-        assembly {
-            let cPos := add(executionData.offset, cOffset)
-            singleOrBatchExecutionData.offset := add(cPos, 0x20)
-            singleOrBatchExecutionData.length := calldataload(cPos)
-        }
-
-        // If the first offset is 64, we have a second item for opData
         if (cOffset >= 64) {
+            // Two dynamic types: abi.encode(calls, opData)
             uint256 oOffset;
             assembly {
                 oOffset := calldataload(add(executionData.offset, 0x20))
             }
-            // Revert if the offset is invalid
             if (oOffset < 64 || oOffset >= executionData.length) revert LibErrors.ExecutionDataExtractionError();
 
             assembly {
+                // Extract calls array data (EIP-7821 format)
+                // The data including array offset up until the start of opData.
+                // The ERC7599Utils.decodeBatch expects the first word to be a pointer to the array length,
+                // which is at the start of executionData.
+                batchExecutionData.offset := executionData.offset
+                batchExecutionData.length := oOffset
+                // Extract opData
                 let oPos := add(executionData.offset, oOffset)
                 opData.offset := add(oPos, 0x20)
                 opData.length := calldataload(oPos)
             }
         } else {
+            // Single dynamic type: abi.encode(calls)
             assembly {
+                batchExecutionData.offset := executionData.offset
+                batchExecutionData.length := executionData.length
                 opData.length := 0
             }
+        }
+    }
+
+    /**
+     * @notice Extracts execution data for single call operations with opData
+     * @dev Decodes executionData to separate the call from the mandatory `opData`. Handles
+     *      SINGLE_CALL_OPDATA_AUTH mode.
+     *
+     * Here, we perform low-level ABI-decoding of dynamic types with the intent of:
+     *   - gracefully handling structural errors that otherwise would result in a generic revert
+     *   - maintaining calldata references
+     *
+     * The expected encoding is abi.encode(abi.encodePacked(target, value, callData), opData)
+     *
+     * Reverts with {LibErrors.ExecutionDataExtractionError} if offsets, lengths or bounds are invalid.
+     *
+     * @param executionData The encoded execution data passed to execute()
+     * @return singleExecutionData The extracted single execution data (bytes type)
+     * @return opData The extracted operation data
+     */
+    function _extractSingleExecAndOpData(bytes calldata executionData)
+        internal
+        pure
+        returns (bytes calldata singleExecutionData, bytes calldata opData)
+    {
+        // Need at least 64 bytes for two offsets
+        if (executionData.length < 64) revert LibErrors.ExecutionDataExtractionError();
+
+        uint256 cOffset;
+        uint256 oOffset;
+        assembly {
+            cOffset := calldataload(executionData.offset)
+            oOffset := calldataload(add(executionData.offset, 0x20))
+        }
+
+        // Validate offsets and ensure we can read 32-byte length fields
+        if (cOffset < 64 || oOffset < 64) revert LibErrors.ExecutionDataExtractionError();
+        if (cOffset + 32 > executionData.length || oOffset + 32 > executionData.length) {
+            revert LibErrors.ExecutionDataExtractionError();
+        }
+
+        // Extract packed single execution data (bytes type)
+        uint256 cLength;
+        assembly {
+            let cPos := add(executionData.offset, cOffset)
+            cLength := calldataload(cPos)
+            singleExecutionData.offset := add(cPos, 0x20)
+            singleExecutionData.length := cLength
+        }
+
+        // singleExecutionData must be at least 20 + 32 bytes long (address + value)
+        if (singleExecutionData.length < 52) revert LibErrors.ExecutionDataExtractionError();
+
+        // Extract opData
+        uint256 oLength;
+        assembly {
+            let oPos := add(executionData.offset, oOffset)
+            oLength := calldataload(oPos)
+            opData.offset := add(oPos, 0x20)
+            opData.length := oLength
+        }
+
+        // Validate that the lengths don't cause out-of-bounds access
+        if (cOffset + 32 + cLength > executionData.length || oOffset + 32 + oLength > executionData.length) {
+            revert LibErrors.ExecutionDataExtractionError();
         }
     }
 

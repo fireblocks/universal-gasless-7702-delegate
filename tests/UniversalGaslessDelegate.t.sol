@@ -349,8 +349,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory opData = abi.encodePacked(nonce, deadline, signature);
 
         // Encode batch execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Fund the delegated user
         vm.deal(address(delegatedAccount), 1 ether);
@@ -652,8 +651,8 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         // Execute from an unauthorized address
         vm.startPrank(DEFAULT_RELAYER);
 
-        // It should revert with UnauthorizedCaller error when called from third party EOA
-        vm.expectRevert(LibErrors.UnauthorizedCaller.selector);
+        // It should revert with UnauthorizedExecution error when mode requires opData and none is provided
+        vm.expectRevert(LibErrors.UnauthorizedExecution.selector);
         delegatedAccount.execute(mode, singleExecData);
 
         vm.stopPrank();
@@ -799,8 +798,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory opData = abi.encodePacked(nonce, deadline, invalidSignature);
 
         // Encode batch execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Fund the delegated user
         vm.deal(address(delegatedAccount), 1 ether);
@@ -1058,11 +1056,9 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Use helper function to create valid signature
         bytes memory signature = _createValidSignature(structHash);
-        // Encode the batch execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
         bytes memory opData = abi.encodePacked(targetNonce, deadline, signature);
-        // Combine the execution data with opData
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        // Encode according to the wrong mode (BATCH_CALL_OPDATA_AUTH)
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Try executing from the delegated EOA itself, which should still revert
         // since BATCH_CALL mode with opData is not supported
@@ -1131,11 +1127,10 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
 
         // Use helper function to create valid signature
         bytes memory signature = _createValidSignature(structHash);
-        // Encode the batch execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
+        // Encode the opData in packed format
         bytes memory opData = abi.encodePacked(targetNonce, deadline, signature);
-        // Combine the execution data with opData
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        // Encode according to the wrong mode (BATCH_CALL_OPDATA_AUTH)
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Execute from an unauthorized address
         vm.startPrank(address(0xdead));
@@ -1268,8 +1263,7 @@ contract UniversalGaslessDelegateTest is Test, UniversalGaslessDelegationHelper 
         bytes memory opData = abi.encodePacked(batchNonce, deadline, signature);
 
         // Encode batch execution data
-        bytes memory batchExecData = ERC7579Utils.encodeBatch(executionBatch);
-        bytes memory executionData = abi.encode(batchExecData, opData);
+        bytes memory executionData = abi.encode(executionBatch, opData);
 
         // Fund the delegated account for the test
         vm.deal(address(delegatedAccount), 1 ether);
