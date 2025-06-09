@@ -5,7 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { UniversalGaslessDelegate } from "../src/UniversalGaslessDelegate.sol";
 import { UniversalGaslessDelegationHelper } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
-import { ERC7579Utils } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
+import { ERC7579Utils, Execution } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 import { MockCallTarget } from "./mocks/MockCallTarget.sol";
 
@@ -15,6 +15,19 @@ import { MockCallTarget } from "./mocks/MockCallTarget.sol";
  */
 contract UniversalGaslessDelegateHarness is UniversalGaslessDelegate {
     constructor(address _killswitchContract) UniversalGaslessDelegate(_killswitchContract) { }
+
+    /**
+     * @notice Library function wrapper for ERC7579Utils.decodeBatch
+     * @dev Exposes ERC7579Utils.decodeBatch for testing purposes
+     * @param executionCalldata The encoded batch execution data
+     */
+    function lib_ERC7579UtilsDecodeBatch(bytes calldata executionCalldata)
+        external
+        pure
+        returns (Execution[] memory executionBatch)
+    {
+        return ERC7579Utils.decodeBatch(executionCalldata);
+    }
 
     /**
      * @notice Expose internal function for testing
@@ -31,14 +44,25 @@ contract UniversalGaslessDelegateHarness is UniversalGaslessDelegate {
     }
 
     /**
-     * @notice Expose internal function for testing
+     * @notice Expose internal function for testing batch execution data extraction
      */
-    function exposed_extractExecAndOpData(bytes calldata executionData)
+    function exposed_extractBatchExecAndOpData(bytes calldata executionData)
         external
         pure
-        returns (bytes memory singleOrBatchExecutionData, bytes memory opData)
+        returns (bytes calldata batchExecutionData, bytes calldata opData)
     {
-        return _extractExecAndOpData(executionData);
+        return _extractBatchExecAndOpData(executionData);
+    }
+
+    /**
+     * @notice Expose internal function for testing single execution data extraction
+     */
+    function exposed_extractSingleExecAndOpData(bytes calldata executionData)
+        external
+        pure
+        returns (bytes calldata singleExecutionData, bytes calldata opData)
+    {
+        return _extractSingleExecAndOpData(executionData);
     }
 
     /**
@@ -184,42 +208,126 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
     /**
      * @notice Test extracting executionData when only calls data is provided
      */
-    function test_ExtractExecAndOpData_OnlyCalls() public view {
+    function test_ExtractBatchExecAndOpData_OnlyCalls() public view {
         // Create execution data with only calls (no opData)
-        bytes memory callsData = abi.encode("test call data");
-        bytes memory executionData = abi.encode(callsData);
+        address target = address(0x1234);
+        uint256 value = 0.1 ether;
+        bytes memory callData = abi.encodeWithSignature("doSomething()");
+
+        // Create array of Execution structs
+        Execution[] memory calls = new Execution[](1);
+        calls[0] = Execution({ target: target, value: value, callData: callData });
+
+        bytes memory executionData = abi.encode(calls);
 
         // Call exposed function to extract OpData
         (bytes memory extractedCalls, bytes memory extractedOpData) =
-            harness.exposed_extractExecAndOpData(executionData);
+            harness.exposed_extractBatchExecAndOpData(executionData);
+
+        // Verify results - extractedCalls should contain the entire array encoding
+        assertEq(extractedOpData.length, 0, "Extracted opData should be empty");
+
+        // Verify we can decode the extracted calls using ERC7579Utils.decodeBatch (the original)
+        // The extractedCalls should be the raw array data that can be directly decoded
+        Execution[] memory decodedCalls = harness.lib_ERC7579UtilsDecodeBatch(extractedCalls);
+        assertEq(decodedCalls.length, 1, "Should have one call");
+        assertEq(decodedCalls[0].target, target, "Target should match");
+        assertEq(decodedCalls[0].value, value, "Value should match");
+        assertEq(keccak256(decodedCalls[0].callData), keccak256(callData), "CallData should match");
+    }
+
+    /**
+     * @notice Test extracting batch execution data with multiple calls
+     */
+    function test_ExtractBatchExecAndOpData_MultipleCalls() public view {
+        // Create execution data with multiple calls (no opData)
+        Execution[] memory calls = new Execution[](3);
+        calls[0] = Execution({
+            target: address(0x1234),
+            value: 0.1 ether,
+            callData: abi.encodeWithSignature("transfer(address,uint256)", address(0x5678), 100)
+        });
+        calls[1] = Execution({
+            target: address(0x5678),
+            value: 0,
+            callData: abi.encodeWithSignature("approve(address,uint256)", address(0x9ABC), 200)
+        });
+        calls[2] = Execution({
+            target: address(0x9ABC),
+            value: 0.2 ether,
+            callData: abi.encodeWithSignature("swap(uint256,uint256)", 100, 200)
+        });
+
+        bytes memory executionData = abi.encode(calls);
+
+        // Call exposed function to extract
+        (bytes memory extractedCalls, bytes memory extractedOpData) =
+            harness.exposed_extractBatchExecAndOpData(executionData);
 
         // Verify results
-        assertEq(keccak256(extractedCalls), keccak256(callsData), "Extracted calls should match original calls");
         assertEq(extractedOpData.length, 0, "Extracted opData should be empty");
+
+        // Verify we can decode the extracted calls
+        vm.breakpoint("a");
+        Execution[] memory decodedCalls = harness.lib_ERC7579UtilsDecodeBatch(extractedCalls);
+        vm.breakpoint("b");
+        assertEq(decodedCalls.length, 3, "Should have three calls");
+
+        // Verify each call
+        for (uint256 i = 0; i < 3; i++) {
+            assertEq(
+                decodedCalls[i].target, calls[i].target, string.concat("Target (", vm.toString(i), ") should match")
+            );
+            assertEq(decodedCalls[i].value, calls[i].value, string.concat("Value (", vm.toString(i), ") should match"));
+            assertEq(
+                keccak256(decodedCalls[i].callData),
+                keccak256(calls[i].callData),
+                string.concat("CallData (", vm.toString(i), ") should match")
+            );
+        }
     }
 
     /**
      * @notice Test extracting executionData when both calls and opData are provided
      */
-    function test_ExtractExecAndOpData_CallsAndOpData() public view {
+    function test_ExtractBatchExecAndOpData_CallsAndOpData() public view {
         // Create execution data with both calls and opData
-        bytes memory callsData = abi.encode("test call data");
-        bytes memory opData = abi.encode(uint256(123), "signature");
-        bytes memory executionData = abi.encode(callsData, opData);
+        address target = address(0x5678);
+        uint256 value = 0.2 ether;
+        bytes memory callData = abi.encodeWithSignature("doSomething()");
+
+        // Create array of Execution structs
+        Execution[] memory calls = new Execution[](1);
+        calls[0] = Execution({ target: target, value: value, callData: callData });
+
+        // Create proper opData with nonce, deadline, and signature
+        uint256 nonce = 12_345;
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory signature = new bytes(65);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+        // EIP-7821 compliance means we pass both the array (calls) and the bytes (opData) to the encoder
+        bytes memory executionData = abi.encode(calls, opData);
 
         // Call exposed function to extract OpData
         (bytes memory extractedCalls, bytes memory extractedOpData) =
-            harness.exposed_extractExecAndOpData(executionData);
+            harness.exposed_extractBatchExecAndOpData(executionData);
 
-        // Verify results
-        assertEq(keccak256(extractedCalls), keccak256(callsData), "Extracted calls should match original calls");
+        // Verify we can decode the extracted calls using ERC7579Utils.decodeBatch (the original)
+        Execution[] memory decodedCalls = harness.lib_ERC7579UtilsDecodeBatch(extractedCalls);
+        assertEq(decodedCalls.length, 1, "Should have one call");
+        assertEq(decodedCalls[0].target, target, "Target should match");
+        assertEq(decodedCalls[0].value, value, "Value should match");
+        assertEq(keccak256(decodedCalls[0].callData), keccak256(callData), "CallData should match");
+
+        // Verify opData
+        assertEq(extractedOpData.length, 129, "OpData should be 129 bytes");
         assertEq(keccak256(extractedOpData), keccak256(opData), "Extracted opData should match original opData");
     }
 
     /**
      * @notice Test extracting executionData when first offset is less than 32 (fails with ExecutionDataExtractionError)
      */
-    function test_RevertWhen_ExtractExecAndOpData_LowFirstOffset() public {
+    function test_RevertWhen_ExtractBatchExecAndOpData_LowFirstOffset() public {
         // Create invalid execution data with first offset < 32
         bytes memory invalidData = new bytes(64);
         // Set the first 32 bytes (offset) to a value less than 32 to trigger the revert
@@ -230,30 +338,71 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
 
         // Call should revert with ExecutionDataExtractionError
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
-        harness.exposed_extractExecAndOpData(invalidData);
+        harness.exposed_extractBatchExecAndOpData(invalidData);
     }
 
     /**
      * @notice Test extracting executionData with non-ABI encoded data (fails with ExecutionDataExtractionError)
      */
-    function test_RevertWhen_ExtractExecAndOpData_NonAbiEncoded() public {
+    function test_RevertWhen_ExtractBatchExecAndOpData_NonAbiEncoded() public {
         // Create invalid execution data (not valid ABI encoding)
         bytes memory invalidData = abi.encodePacked(bytes4(0x12345678));
 
         // Call should revert with ExecutionDataExtractionError
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
-        harness.exposed_extractExecAndOpData(invalidData);
+        harness.exposed_extractBatchExecAndOpData(invalidData);
+    }
+
+    /**
+     * @notice Test extracting executionData with double encoding over calls
+     */
+    function test_RevertWhen_ExtractBatchExecAndOpData_DoubleAbiEncoded() public {
+        // Create execution data with both calls and opData
+        address target = address(0x5678);
+        uint256 value = 0.2 ether;
+        bytes memory callData = abi.encodeWithSignature("doSomething()");
+
+        // Create array of Execution structs
+        Execution[] memory calls = new Execution[](1);
+        calls[0] = Execution({ target: target, value: value, callData: callData });
+
+        // Create proper opData with nonce, deadline, and signature
+        uint256 nonce = 12_345;
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory signature = new bytes(65);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+
+        // Create execution data that encodes the calls array into bytes, before encoding it along with opData
+        bytes memory invalidExecutionData = abi.encode(abi.encode(calls), opData);
+
+        // Call exposed function to extract invalidExecutionData and OpData
+        (bytes memory extractedCalls, bytes memory extractedOpData) =
+            harness.exposed_extractBatchExecAndOpData(invalidExecutionData);
+
+        // Verify opData
+        assertEq(extractedOpData.length, 129, "OpData should be 129 bytes");
+        assertEq(keccak256(extractedOpData), keccak256(opData), "Extracted opData should match original opData");
+
+        // Call should revert with ERC7579DecodingError
+        vm.expectRevert(ERC7579Utils.ERC7579DecodingError.selector);
+        harness.lib_ERC7579UtilsDecodeBatch(extractedCalls);
     }
 
     /**
      * @notice Test extracting executionData with second offset less than 64 (fails with ExecutionDataExtractionError)
      */
-    function test_RevertWhen_ExtractExecAndOpData_LowSecondOffset() public {
+    function test_RevertWhen_ExtractBatchExecAndOpData_LowSecondOffset() public {
         // Create execution data with both items but invalid second offset
-        // First create normal encoding with two items
-        bytes memory callsData = abi.encode("test call data");
-        bytes memory opData = abi.encode("test op data");
-        bytes memory executionData = abi.encode(callsData, opData);
+        // First create a valid batch execution and opData
+        Execution[] memory calls = new Execution[](1);
+        calls[0] = Execution({ target: address(0x1234), value: 0, callData: "" });
+
+        uint256 nonce = 12_345;
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory signature = new bytes(65);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+
+        bytes memory executionData = abi.encode(calls, opData);
 
         // Modify the second offset to be less than 64
         assembly {
@@ -263,18 +412,24 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
 
         // Call should revert with ExecutionDataExtractionError
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
-        harness.exposed_extractExecAndOpData(executionData);
+        harness.exposed_extractBatchExecAndOpData(executionData);
     }
 
     /**
      * @notice Test extracting executionData with second offset exceeding data length (fails with
      * ExecutionDataExtractionError)
      */
-    function test_RevertWhen_ExtractExecAndOpData_ExcessiveOffset() public {
+    function test_RevertWhen_ExtractBatchExecAndOpData_ExcessiveOffset() public {
         // Create execution data with two offsets but second offset beyond data length
-        bytes memory callsData = abi.encode("test call data");
-        bytes memory opData = abi.encode("test op data");
-        bytes memory executionData = abi.encode(callsData, opData);
+        Execution[] memory calls = new Execution[](1);
+        calls[0] = Execution({ target: address(0x1234), value: 0, callData: "" });
+
+        uint256 nonce = 12_345;
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory signature = new bytes(65);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+
+        bytes memory executionData = abi.encode(calls, opData);
 
         // Modify the second offset to point beyond the total length
         uint256 dataLength = executionData.length;
@@ -285,7 +440,142 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
 
         // Call should revert with ExecutionDataExtractionError
         vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
-        harness.exposed_extractExecAndOpData(executionData);
+        harness.exposed_extractBatchExecAndOpData(executionData);
+    }
+
+    /**
+     * @notice Test extracting single execution data with opData
+     */
+    function test_ExtractSingleExecAndOpData_WithOpData() public view {
+        // Create single execution data with opData
+        // For single calls: abi.encode(abi.encodePacked(target, value, callData), opData)
+        address target = address(0x5678);
+        uint256 value = 0.2 ether;
+        bytes memory callData = abi.encodeWithSignature("doSomething()");
+
+        // Pack the execution data
+        bytes memory packedExecutionData = abi.encodePacked(target, value, callData);
+
+        // Create proper opData with nonce, deadline, and signature
+        uint256 nonce = 12_345;
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory signature = new bytes(65);
+        bytes memory opData = abi.encodePacked(nonce, deadline, signature);
+
+        // Encode as per SINGLE_CALL_OPDATA_AUTH format
+        bytes memory executionData = abi.encode(packedExecutionData, opData);
+
+        // Call exposed function to extract
+        (bytes memory extractedSingleData, bytes memory extractedOpData) =
+            harness.exposed_extractSingleExecAndOpData(executionData);
+
+        // Verify extracted data
+        assertEq(keccak256(extractedSingleData), keccak256(packedExecutionData), "Extracted single data should match");
+        assertEq(extractedOpData.length, 129, "OpData should be 129 bytes");
+        assertEq(keccak256(extractedOpData), keccak256(opData), "Extracted opData should match original opData");
+    }
+
+    /**
+     * @notice Test extracting single call with no opData
+     */
+    function test_RevertWhen_ExtractSingleExecAndOpData_7579SingleCallDefaultModeSelectorEncoding() public {
+        // Create single execution data as per EIP-7579 single call encoding
+        // For such call type and default execution mode: abi.encodePacked(target, value, callData)
+        address target = address(0x5678);
+        uint256 value = 1000 ether;
+        bytes memory callData = abi.encodeWithSignature("doSomething()");
+
+        // Pack the execution data
+        bytes memory packedExecutionData = abi.encodePacked(target, value, callData);
+
+        // Call should revert with ExecutionDataExtractionError because it lacks opData
+        vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
+        harness.exposed_extractSingleExecAndOpData(packedExecutionData);
+
+        // Craft an execution data that attempts to bypass the length checks
+        // For such call type and default execution mode: abi.encodePacked(target, value, callData)
+        bytes32 fakecOffset = bytes32(uint256(0x40));
+        bytes32 fakeOpDataOffset = bytes32(uint256(0x40));
+
+        // Pack the execution data
+        bytes memory packedExecutionData2 = abi.encodePacked(fakecOffset, fakeOpDataOffset, callData);
+
+        // Call should revert with ExecutionDataExtractionError because it lacks opData
+        vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
+        harness.exposed_extractSingleExecAndOpData(packedExecutionData2);
+
+        // Craft an execution data that attempts to bypass the bounds checks
+        bytes32 firstWord = bytes32(uint256(0x40));
+        bytes32 secondWord = bytes32(uint256(0x40));
+
+        // Pack the execution data
+        bytes memory callData3 = abi.encodeWithSelector(bytes4(0x00000000), bytes28(uint224(0x34)));
+        bytes memory packedExecutionData3 = abi.encodePacked(firstWord, secondWord, callData3);
+
+        // Call should revert with ExecutionDataExtractionError because it lacks opData
+        vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
+        harness.exposed_extractSingleExecAndOpData(packedExecutionData3);
+    }
+
+    /**
+     * @notice Test extracting single execution data with first offset less than 64
+     */
+    function test_RevertWhen_ExtractSingleExecAndOpData_LowFirstOffset() public {
+        // Create invalid execution data with first offset < 64
+        bytes memory invalidData = new bytes(96);
+        // Set the first offset to 32 (less than required 64)
+        assembly {
+            mstore(add(invalidData, 32), 32)
+        }
+
+        // Call should revert with ExecutionDataExtractionError
+        vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
+        harness.exposed_extractSingleExecAndOpData(invalidData);
+    }
+
+    /**
+     * @notice Test extracting single execution data with second offset less than 64
+     */
+    function test_RevertWhen_ExtractSingleExecAndOpData_LowSecondOffset() public {
+        // Create execution data that would have valid first offset but invalid second
+        address target = address(0x1234);
+        uint256 value = 0;
+        bytes memory callData = "";
+        bytes memory packedData = abi.encodePacked(target, value, callData);
+        bytes memory opData = abi.encodePacked(uint256(123), uint256(456), new bytes(65));
+        bytes memory executionData = abi.encode(packedData, opData);
+
+        // Modify the second offset to be less than 64
+        assembly {
+            mstore(add(executionData, 64), 32) // Should be at least 64
+        }
+
+        // Call should revert with ExecutionDataExtractionError
+        vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
+        harness.exposed_extractSingleExecAndOpData(executionData);
+    }
+
+    /**
+     * @notice Test extracting single execution data with second offset exceeding data length
+     */
+    function test_RevertWhen_ExtractSingleExecAndOpData_ExcessiveOffset() public {
+        // Create valid single execution data
+        address target = address(0x1234);
+        uint256 value = 0;
+        bytes memory callData = "";
+        bytes memory packedData = abi.encodePacked(target, value, callData);
+        bytes memory opData = abi.encodePacked(uint256(123), uint256(456), new bytes(65));
+        bytes memory executionData = abi.encode(packedData, opData);
+
+        // Modify the second offset to exceed data length
+        uint256 dataLength = executionData.length;
+        assembly {
+            mstore(add(executionData, 64), add(dataLength, 100))
+        }
+
+        // Call should revert with ExecutionDataExtractionError
+        vm.expectRevert(LibErrors.ExecutionDataExtractionError.selector);
+        harness.exposed_extractSingleExecAndOpData(executionData);
     }
 
     // =============================================================

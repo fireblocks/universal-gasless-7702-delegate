@@ -91,32 +91,6 @@ abstract contract UniversalGaslessDelegationHelper is CommonBase, StdAssertions 
     }
 
     /**
-     * @dev Helper function to execute an operation through a delegated EOA
-     * @param executor The address that will execute the transaction
-     * @param delegatedEOA The address of the delegated EOA
-     * @param target The target contract to call
-     * @param value The ETH value to send
-     * @param callData The calldata to execute
-     * @return success Whether the call was successful
-     * @return returnData The data returned by the call
-     */
-    // function executeAsDelegated(
-    //     address executor,
-    //     address delegatedEOA,
-    //     address target,
-    //     uint256 value,
-    //     bytes memory callData
-    // ) public returns (bool success, bytes memory returnData) {
-    //     vm.startPrank(executor);
-    //     (success, returnData) = delegatedEOA.call(
-    //         abi.encodePacked(bytes4(keccak256("execute(address,uint256,bytes)")),
-    //         abi.encode(target, value, callData))
-    //     );
-    //     vm.stopPrank();
-    //     return (success, returnData);
-    // }
-
-    /**
      * @dev Verifies that an account has been properly delegated
      * @param account The account to check
      * @param implementation The expected implementation address
