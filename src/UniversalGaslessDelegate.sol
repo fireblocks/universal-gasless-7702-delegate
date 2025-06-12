@@ -387,6 +387,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     )
         external
         view
+        whenNotPaused
         onlyProxy
         returns (bytes4 magicValue)
     {
