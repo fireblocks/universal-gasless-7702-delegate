@@ -36,7 +36,7 @@ import { IKillSwitch } from "./interface/IKillSwitch.sol";
  * - Integrates EIP-712 typed data signing for structured transaction authorization
  * - Implements unordered nonces for authorization replay protection
  * - Provides ERC-1271 signature validation compatibility for existing protocols
- * - Includes token receiver capabilities (ERC-721 and ERC-1155)
+ * - Includes token receiver capabilities (ERC-721, ERC-1155, and ERC-223)
  * - Emergency pause functionality via KillSwitch contract
  *
  * @custom:security-contact support@fireblocks.com
@@ -453,6 +453,7 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      *   - the {IERC7821} interface id
      *   - the {IERC1271} interface id
      *   - the {IERC721Receiver} interface id (checked in TokenReceiver)
+     *   - the {IERC223Receiver} interface id (checked in TokenReceiver)
      *   - the {IERC1155Receiver} interface id (checked in ERC1155Holder)
      *   - the {IERC165} interface id (checked in ERC1155Holder -> ERC165)
      */
