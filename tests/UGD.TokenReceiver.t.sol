@@ -5,6 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
+import { MockERC223 } from "./mocks/MockERC223.sol";
 import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 import { UGDNonReceiverMock } from "./mocks/UGDNonReceiverMock.sol";
 
@@ -42,13 +43,15 @@ contract MockERC1155 is ERC1155 {
 
 /**
  * @title Universal Gasless Delegate (UGD) Token Receiver Test
- * @dev Test suite for the UniversalGaslessDelegate contract, specifically for receiving ERC721 and ERC1155 tokens
+ * @dev Test suite for the UniversalGaslessDelegate contract, specifically for receiving ERC721, ERC1155, and ERC223
+ * tokens
  */
 contract UGDTokenReceiverTest is Test, UniversalGaslessDelegationHelper {
     address public userA;
     uint256 private userAPrivateKey;
     MockERC721 public mockNFT;
     MockERC1155 public mockERC1155;
+    MockERC223 public mockERC223;
     UGDNonReceiverMock public ugdNonReceiver;
 
     //NOTE: Inherits the relevant variable(s) from the helper contract:
@@ -69,6 +72,8 @@ contract UGDTokenReceiverTest is Test, UniversalGaslessDelegationHelper {
         mockNFT = new MockERC721();
         // Deploy mock ERC1155 contract
         mockERC1155 = new MockERC1155();
+        // Deploy mock ERC223 contract
+        mockERC223 = new MockERC223();
     }
 
     /**
@@ -206,6 +211,90 @@ contract UGDTokenReceiverTest is Test, UniversalGaslessDelegationHelper {
         // This should revert as the implementation doesn't support the IERC1155Receiver interface
         vm.expectRevert();
         mockERC1155.mint(delegatedUser, tokenId, amount);
+    }
+
+    // =============================================================
+    //                   ERC223 TOKEN TESTS
+    // =============================================================
+
+    /**
+     * @dev Test that a regular EOA can receive ERC223 tokens
+     */
+    function test_UserCanReceiveERC223() public {
+        // Mint some tokens to test sender
+        mockERC223.mint(address(this), 1000);
+
+        // Transfer to regular EOA
+        uint256 amount = 100;
+        bool success = mockERC223.transfer(userA, amount);
+
+        assertTrue(success, "Transfer should succeed");
+        assertEq(mockERC223.balanceOf(userA), amount, "User should have received tokens");
+    }
+
+    /**
+     * @dev Test that a delegated account can receive ERC223 tokens
+     */
+    function test_DelegatedUserCanReceiveERC223() public {
+        // Set up delegation for userA
+        address delegatedUser = setupDelegation(userA, userAPrivateKey, address(gaslessDelegate));
+
+        // Verify the account is properly delegated
+        assertDelegated(delegatedUser, address(gaslessDelegate));
+
+        // Mint some tokens to test sender
+        mockERC223.mint(address(this), 1000);
+
+        // Transfer to delegated account
+        uint256 amount = 100;
+        bool success = mockERC223.transfer(delegatedUser, amount);
+
+        assertTrue(success, "Transfer should succeed");
+        assertEq(mockERC223.balanceOf(delegatedUser), amount, "Delegated user should have received tokens");
+    }
+
+    /**
+     * @dev Test that a delegated account can receive ERC223 tokens with custom data
+     */
+    function test_DelegatedUserCanReceiveERC223WithData() public {
+        // Set up delegation for userA
+        address delegatedUser = setupDelegation(userA, userAPrivateKey, address(gaslessDelegate));
+
+        // Verify the account is properly delegated
+        assertDelegated(delegatedUser, address(gaslessDelegate));
+
+        // Mint some tokens to test sender
+        mockERC223.mint(address(this), 1000);
+
+        // Transfer to delegated account with custom data
+        uint256 amount = 100;
+        bytes memory customData = abi.encodePacked("Hello ERC223!");
+        bool success = mockERC223.transfer(delegatedUser, amount, customData);
+
+        assertTrue(success, "Transfer with data should succeed");
+        assertEq(mockERC223.balanceOf(delegatedUser), amount, "Delegated user should have received tokens");
+    }
+
+    /**
+     * @dev Test that delegation to a non-receiver implementation fails when receiving ERC223
+     */
+    function test_RevertWhen_DelegatedToNonReceiverReceivesERC223() public {
+        // Create a new user for this test
+        (address userB, uint256 userBPrivateKey) = makeAddrAndKey("userB");
+        vm.deal(userB, 10 ether);
+
+        // Set up delegation to the non-receiver implementation
+        address delegatedUser = setupDelegation(userB, userBPrivateKey, address(ugdNonReceiver));
+
+        // Verify the account is properly delegated
+        assertDelegated(delegatedUser, address(ugdNonReceiver));
+
+        // Mint some tokens to test sender
+        mockERC223.mint(address(this), 1000);
+
+        // This should revert as the implementation doesn't support the IERC223Receiver interface
+        vm.expectRevert();
+        mockERC223.transfer(delegatedUser, 100);
     }
 
     // =============================================================
