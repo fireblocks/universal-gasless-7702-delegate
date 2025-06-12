@@ -2,8 +2,6 @@
 pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
-import { console2 } from "forge-std/console2.sol";
-import { Packing } from "@openzeppelin/contracts/utils/Packing.sol";
 import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";

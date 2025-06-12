@@ -2,7 +2,6 @@
 pragma solidity 0.8.27;
 
 import { Test } from "forge-std/Test.sol";
-import { TypedAuthorization } from "../src/mixins/TypedAuthorization.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
 import "./mocks/MockKillSwitch.sol";

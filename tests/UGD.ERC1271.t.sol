@@ -4,7 +4,6 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
 import "./mocks/MockKillSwitch.sol";

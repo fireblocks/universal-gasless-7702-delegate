@@ -2,10 +2,8 @@
 pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
-import { console2 } from "forge-std/console2.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
 import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
-import { IKillSwitch } from "../src/interface/IKillSwitch.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
 
 /**
