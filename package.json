@@ -12,7 +12,7 @@
   "devDependencies": {
     "forge-std": "github:foundry-rs/forge-std#v1.9.6",
     "prettier": "^3.5.0",
-    "solhint": "^5.0.5"
+    "solhint": "^5.1.0"
   },
   "keywords": [
     "blockchain",
@@ -28,7 +28,8 @@
     "clean": "rm -rf cache out",
     "build": "forge build",
     "lint": "bun run lint:sol && bun run prettier:check",
-    "lint:sol": "forge fmt --check && bun solhint \"{script,src,tests}/**/*.sol\"",
+    "lint:sol": "forge fmt --check && bun solhint --noPoster \"{script,src,tests}/**/*.sol\"",
+    "lint:sol:fix": "forge fmt && bun solhint --fix --noPoster \"{script,src,tests}/**/*.sol\"",
     "prettier:check": "prettier --check \"**/*.{json,md,yml}\" --ignore-path \".prettierignore\"",
     "prettier:write": "prettier --write \"**/*.{json,md,yml}\" --ignore-path \".prettierignore\"",
     "flatten:ugd": "forge flatten src/UniversalGaslessDelegate.sol --output src/flattened/UniversalGaslessDelegate.flat.sol",
