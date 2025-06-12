@@ -754,8 +754,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
     }
 
     /**
-     * @notice This function is used to get the namespaced, structured nonce storage
-     * @dev This function is used to get the nonce storage pointer
+     * @notice Returns the storage reference for the nonce bitmap used in replay protection
+     * @dev Uses ERC-7201 pattern for avoiding storage collisions with namespaced, structured nonce storage
      * @custom:storage-location erc7201:fireblocks.global.security.nonces
      * @return $ The reference to the {NonceStorage} struct in storage
      */
