@@ -2,12 +2,9 @@
 pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
-import { console2 } from "forge-std/console2.sol";
 import { ERC7579Utils, Execution } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 import { Packing } from "@openzeppelin/contracts/utils/Packing.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "../UniversalGaslessDelegationHelper.sol";
-import { MockCallTarget } from "../mocks/MockCallTarget.sol";
-import { KillSwitch } from "../../src/KillSwitch.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { MockKillSwitch } from "../mocks/MockKillSwitch.sol";
 

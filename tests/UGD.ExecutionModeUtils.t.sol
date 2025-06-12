@@ -5,11 +5,9 @@ import { Test } from "forge-std/Test.sol";
 import { UniversalGaslessDelegate } from "../src/UniversalGaslessDelegate.sol";
 import { UniversalGaslessDelegationHelper } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { ERC7579Utils } from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 import { MockCallTarget } from "./mocks/MockCallTarget.sol";
-import { console2 } from "forge-std/console2.sol";
 
 /**
  * @title UniversalGaslessDelegateHarness
@@ -378,9 +376,10 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         uint256 callValue = 0; // No value
 
         // This call should not revert
-        bool callFailed = false;
+        bool callFailed = true;
         try harness.exposed_call(nonContract, callValue, callData) {
             // Call succeeded
+            callFailed = false;
         } catch {
             callFailed = true;
         }

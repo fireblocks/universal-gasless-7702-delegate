@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity 0.8.27;
 
-import { Test } from "forge-std/Test.sol";
 import { CommonBase } from "forge-std/Base.sol";
 import { StdAssertions } from "forge-std/StdAssertions.sol";
-import { Vm } from "forge-std/Vm.sol";
 import { UniversalGaslessDelegate } from "../src/UniversalGaslessDelegate.sol";
 import { IKillSwitch } from "../src/interface/IKillSwitch.sol";
 
@@ -22,8 +20,8 @@ abstract contract UniversalGaslessDelegationHelper is CommonBase, StdAssertions 
     //     address implementation; // Address of the contract implementation that will be delegated to
     // }
 
-    UniversalGaslessDelegate gaslessDelegate;
-    IKillSwitch killswitchContract;
+    UniversalGaslessDelegate internal gaslessDelegate;
+    IKillSwitch internal killswitchContract;
 
     /**
      * @dev Sets up a delegation for an EOA to use a specific implementation

@@ -4,10 +4,9 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
-import "./mocks/MockKillSwitch.sol";
+import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 
 /**
  * @title Universal Gasless Delegate (UGD) ERC1271 Implementation Test
@@ -20,12 +19,12 @@ contract UGDERC1271Test is Test, UniversalGaslessDelegationHelper {
     address public delegatedAccount;
 
     // Constants
-    bytes4 constant ERC1271_MAGIC_VALUE = IERC1271.isValidSignature.selector;
-    bytes4 constant ERC1271_INVALID_VALUE = 0xffffffff;
+    bytes4 internal constant ERC1271_MAGIC_VALUE = IERC1271.isValidSignature.selector;
+    bytes4 internal constant ERC1271_INVALID_VALUE = 0xffffffff;
 
     // Test message and hash
-    string constant TEST_MESSAGE = "ERC1271 test message";
-    bytes32 constant TEST_MESSAGE_HASH = keccak256(abi.encodePacked(TEST_MESSAGE));
+    string internal constant TEST_MESSAGE = "ERC1271 test message";
+    bytes32 internal constant TEST_MESSAGE_HASH = keccak256(abi.encodePacked(TEST_MESSAGE));
 
     function setUp() public {
         // Set up mock killswitch
