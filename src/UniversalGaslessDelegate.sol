@@ -73,19 +73,38 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @dev These values correspond to the execution modes defined in {supportsExecutionMode}, with INVALID as the
      *      default 0 state
      *
-     * - INVALID: Represents an invalid/unsupported execution mode (0)
-     * - SINGLE_CALL_OPDATA_AUTH: Single call with authorization via opData (1)
-     * - BATCH_CALL_OPDATA_AUTH: Batch call with authorization via optional opData (2)
-     * - BATCH_CALL: Batch call with self-call authorization (3)
+     * Supported execution modes are detailed in the table below:
+     *
+     * ```
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | Mode ID          | CallType | ExecType | Unused     | ModeSelector      | ModePayload |
+     *      |                  | (1 byte) | (1 byte) | (4 bytes)  | (4 bytes)         | (22 bytes)  |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | SINGLE_CALL_     | 0x00     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
+     *      | OPDATA_AUTH  (1) | (Single) | (Revert) | (Empty)    | (Auth via opData) |             |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | BATCH_CALL_      | 0x01     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
+     *      | OPDATA_AUTH  (2) | (Batch)  | (Revert) | (Empty)    | (Auth via opData) |             |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     *      | BATCH_CALL       | 0x01     | 0x00     | 0x00000000 | 0x00000000        | ANY         |
+     *      |              (3) | (Batch)  | (Revert) | (Empty)    | (Default)         |             |
+     *      +------------------+----------+----------+------------+-------------------+-------------+
+     * ```
+     *
+     * Mode Descriptions:
+     * - INVALID (0): Represents an invalid/unsupported execution mode
+     * - SINGLE_CALL_OPDATA_AUTH (1): Single call with authorization via **required** opData.
+     * - BATCH_CALL_OPDATA_AUTH (2): Batch call with authorization via optional opData.
+     * - BATCH_CALL (3): Batch call with self-call authorization.
      */
     enum ExecutionModeId {
         // 0: Invalid mode
         INVALID,
-        // 1: CallType = Single (0x00), ExecType = Revert (0x00), ModeSelector = Auth via opData (0x78210001)
+        // 1: CallType = Single (0x00), ExecType = Revert on failure (0x00), ModeSelector = opData auth (0x78210001)
         SINGLE_CALL_OPDATA_AUTH,
-        // 2: CallType = Batch (0x01), ExecType = Revert (0x00), ModeSelector = Auth via opData (0x78210001)
+        // 2: CallType = Batch (0x01), ExecType = Revert on failure (0x00), ModeSelector = opData auth (0x78210001)
         BATCH_CALL_OPDATA_AUTH,
-        // 3: CallType = Batch (0x01), ExecType = Revert (0x00), ModeSelector = Default (0x00000000)
+        // 3: CallType = Batch (0x01), ExecType = Revert on failure (0x00), ModeSelector = Default (0x00000000)
         BATCH_CALL
     }
 
@@ -414,24 +433,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * @notice This function is provided for frontends to detect support. It checks if the contract supports
      *         a specific execution mode.
      *
-     * @dev Determines whether the contract supports the specified execution mode. Supported execution modes are
-     *      detailed in the table below:
-     *
-     * ```
-     *      +------------------+----------+----------+------------+-------------------+-------------+
-     *      | Mode ID          | CallType | ExecType | Unused     | ModeSelector      | ModePayload |
-     *      |                  | (1 byte) | (1 byte) | (4 bytes)  | (4 bytes)         | (22 bytes)  |
-     *      +------------------+----------+----------+------------+-------------------+-------------+
-     *      | SINGLE_CALL_     | 0x00     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
-     *      | OPDATA_AUTH  (1) | (Single) | (Revert) | (Empty)    | (Auth via opData) |             |
-     *      +------------------+----------+----------+------------+-------------------+-------------+
-     *      | BATCH_CALL_      | 0x01     | 0x00     | 0x00000000 | 0x78210001        | ANY         |
-     *      | OPDATA_AUTH  (2) | (Batch)  | (Revert) | (Empty)    | (Auth via opData) |             |
-     *      +------------------+----------+----------+------------+-------------------+-------------+
-     *      | BATCH_CALL       | 0x01     | 0x00     | 0x00000000 | 0x00000000        | ANY         |
-     *      |              (3) | (Batch)  | (Revert) | (Empty)    | (Default)         |             |
-     *      +------------------+----------+----------+------------+-------------------+-------------+
-     * ```
+     * @dev Determines whether the contract supports the specified execution mode.
+     *      See {ExecutionModeId} for mode layout and definitions.
      *
      * @param mode The fully-qualified execution mode to check
      * @return isSupported True if the mode is supported, false otherwise
@@ -510,15 +513,8 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
 
     /**
      * @notice Identifies the type of execution mode
-     * @dev Analyzes the execution mode and returns the {ExecutionModeId} identifier:
-     *
-     * - INVALID if the mode is not supported
-     * - SINGLE_CALL_OPDATA_AUTH for CallType = Single (0x00), ExecType = Revert on failure (0x00),
-     *   Unused = EMPTY, ModeSelector = Authorization via **required** `opData` (0x78210001), ModePayload = ANY
-     * - BATCH_CALL_OPDATA_AUTH for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
-     *   Unused = EMPTY, ModeSelector = Authorization via optional `opData` (0x78210001), ModePayload = ANY
-     * - BATCH_CALL for CallType = Batch (0x01), ExecType = Revert on failure (0x00),
-     *        Unused = EMPTY, ModeSelector = Default (0x00000000), ModePayload = ANY
+     * @dev Analyzes the execution mode and returns the {ExecutionModeId} identifier. See {ExecutionModeId} for mode
+     *      layout and definitions.
      *
      * @param mode The execution mode to analyze
      * @return The enum value representing the execution mode type/identifier
