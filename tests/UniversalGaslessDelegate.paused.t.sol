@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
+import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
 import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
@@ -38,6 +39,26 @@ contract UniversalGaslessDelegatePausedTest is Test, UniversalGaslessDelegationH
     // =============================================================
     //                   NEGATIVE TEST CASES
     // =============================================================
+
+    /**
+     * @dev Test that isValidSignature reverts when the contract is paused
+     */
+    function test_RevertWhen_IsValidSignatureWhilePaused() public {
+        // First verify the account is properly delegated
+        assertDelegated(address(delegatedAccount), address(gaslessDelegate));
+        // Verify the killswitch is actually paused
+        assertTrue(killswitchContract.paused(), "Killswitch should be paused for this test");
+
+        // Create a valid signature using the userA private key
+        bytes32 testMessageHash = keccak256(abi.encodePacked("Test message for ERC1271"));
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(testMessageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userAPrivateKey, ethSignedMessageHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // The call should revert with EnforcedPause error because the contract is paused
+        vm.expectRevert(LibErrors.EnforcedPause.selector);
+        delegatedAccount.isValidSignature(ethSignedMessageHash, signature);
+    }
 
     //
     /**
