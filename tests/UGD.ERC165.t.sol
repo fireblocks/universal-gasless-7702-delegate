@@ -23,6 +23,7 @@ contract UGDERC165Test is Test, UniversalGaslessDelegationHelper {
     bytes4 private constant IERC165_INTERFACE_ID = hex"01ffc9a7"; // From EIP-165
     bytes4 private constant IERC721_RECEIVER_INTERFACE_ID = hex"150b7a02"; // From EIP-721
     bytes4 private constant IERC1155_RECEIVER_INTERFACE_ID = hex"4e2312e0"; // From EIP-1155
+    bytes4 private constant IERC223_RECEIVER_INTERFACE_ID = hex"8943ec02"; // From EIP-223's single function selector
     // ERC-1271 does not have a strict requirement for ERC165 support. Nevertheless, we add it.
     bytes4 private constant IERC1271_INTERFACE_ID = type(IERC1271).interfaceId;
     // EIP-7821 does not have strict requirement for ERC165 support. Nevertheless, we add it.
@@ -87,6 +88,20 @@ contract UGDERC165Test is Test, UniversalGaslessDelegationHelper {
     }
 
     /**
+     * @dev Test that delegated account supports the IERC223Receiver interface
+     */
+    function test_DelegatedSupportsIERC223ReceiverInterface() public view {
+        this.assertDelegated(userA, address(gaslessDelegate));
+        // Call supportsInterface on the delegated account
+        (bool success, bytes memory data) =
+            userA.staticcall(abi.encodeWithSelector(IERC165.supportsInterface.selector, IERC223_RECEIVER_INTERFACE_ID));
+
+        assertTrue(success, "Call to supportsInterface should succeed");
+        bool supported = abi.decode(data, (bool));
+        assertTrue(supported, "Delegated account should support IERC223Receiver interface");
+    }
+
+    /**
      * @dev Test that delegated account supports the IERC1271 interface
      */
     function test_DelegatedSupportsIERC1271() public view {
@@ -139,6 +154,9 @@ contract UGDERC165Test is Test, UniversalGaslessDelegationHelper {
         // Test for IERC1155Receiver
         vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
         res = gaslessDelegate.supportsInterface(IERC1155_RECEIVER_INTERFACE_ID);
+        // Test for IERC223Receiver
+        vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
+        res = gaslessDelegate.supportsInterface(IERC223_RECEIVER_INTERFACE_ID);
         // Test for IERC1271
         vm.expectRevert(LibErrors.UnauthorizedCallContext.selector);
         gaslessDelegate.supportsInterface(IERC1271_INTERFACE_ID);
