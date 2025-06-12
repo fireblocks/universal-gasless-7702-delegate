@@ -376,9 +376,10 @@ contract UGDExecutionModeUtilsTest is Test, UniversalGaslessDelegationHelper {
         uint256 callValue = 0; // No value
 
         // This call should not revert
-        bool callFailed = false;
+        bool callFailed = true;
         try harness.exposed_call(nonContract, callValue, callData) {
             // Call succeeded
+            callFailed = false;
         } catch {
             callFailed = true;
         }

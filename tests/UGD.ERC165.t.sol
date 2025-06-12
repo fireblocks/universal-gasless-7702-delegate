@@ -7,8 +7,7 @@ import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { IERC7821 } from "../src/interface/IERC7821.sol";
 import { UniversalGaslessDelegationHelper, UniversalGaslessDelegate } from "./UniversalGaslessDelegationHelper.sol";
 import { LibErrors } from "../src/library/LibErrors.sol";
-import "./mocks/MockKillSwitch.sol";
-import "./mocks/UGDNonReceiverMock.sol";
+import { MockKillSwitch } from "./mocks/MockKillSwitch.sol";
 
 /**
  * @title Universal Gasless Delegate (UGD) ERC165 Interface Support Test

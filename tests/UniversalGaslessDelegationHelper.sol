@@ -20,8 +20,8 @@ abstract contract UniversalGaslessDelegationHelper is CommonBase, StdAssertions 
     //     address implementation; // Address of the contract implementation that will be delegated to
     // }
 
-    UniversalGaslessDelegate gaslessDelegate;
-    IKillSwitch killswitchContract;
+    UniversalGaslessDelegate internal gaslessDelegate;
+    IKillSwitch internal killswitchContract;
 
     /**
      * @dev Sets up a delegation for an EOA to use a specific implementation
