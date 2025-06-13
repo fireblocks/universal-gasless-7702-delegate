@@ -96,6 +96,11 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
      * - SINGLE_CALL_OPDATA_AUTH (1): Single call with authorization via **required** opData.
      * - BATCH_CALL_OPDATA_AUTH (2): Batch call with authorization via optional opData.
      * - BATCH_CALL (3): Batch call with self-call authorization.
+     *
+     * Note that since opData is optional for mode BATCH_CALL_OPDATA_AUTH, it will fall back
+     * to `msg.sender` verification when opData is not provided. A mode for Single `CallType` without opData
+     * is not supported under the premise that in such scenarios, the EOA should be making the call
+     * traditionally and not through the delegate contract.
      */
     enum ExecutionModeId {
         // 0: Invalid mode
@@ -210,35 +215,30 @@ contract UniversalGaslessDelegate is IERC1271, IERC7821, NonceBitmap, TokenRecei
 
     /**
      * @notice Executes one or more calls on behalf of this Delegated EOA, supporting both single and batch operations
-     * with an optional authorization mechanism. The caller can be either the Delegated EOA itself or another account
+     * with an optional authorization mechanism. The caller can be either the Delegated EOA itself, or another account
      * provided that the latter has a valid signature for the execution(s) to be made.
      *
      * @dev Processes execution requests according to the EIP-7579 and EIP-7821 specification, which define the mode
      * format and execution data structure. This function supports three different execution modes as detailed in
      * {supportsExecutionMode}.
      *
-     * The `executionData` parameter follows EIP-7821 encoding rules:
-     *   - For modes with opData for authorization (SINGLE_CALL_OPDATA_AUTH and BATCH_CALL_OPDATA_AUTH) the following
-     *     encoding is expected `abi.encode(sobExecutionData, opData)`, where:
-     *     - in SINGLE_CALL_OPDATA_AUTH, `sobExecutionData` is abi.encodePacked(target, value, callData)
-     *     - in BATCH_CALL_OPDATA_AUTH, `sobExecutionData` is abi.encode(calls)
-     *     - `opData` is abi.encodePacked(nonce, deadline, signature)
-     *   - For self-call mode (BATCH_CALL): `abi.encode(calls)` with no optional `opData`
+     * The `executionData` parameter should follow these encoding rules:
+     *   - For SINGLE_CALL_OPDATA_AUTH: `abi.encode(abi.encodePacked(target, value, callData), opData)`
+     *   - For BATCH_CALL_OPDATA_AUTH with opData present: `abi.encode(calls, opData)`
+     *   - For BATCH_CALL and BATCH_CALL_OPDATA_AUTH without opData present (self-call): `abi.encode(calls)`
+     *   - `opData` represents the bytes produced by `abi.encodePacked(nonce, deadline, signature)`
+     *   - `calls` represents an array of `Execution` structs
      *
      * Authorization flow:
      *
-     * Note that while for mode BATCH_CALL_OPDATA_AUTH, opData is optional (fallback to `msg.sender` verification),
-     * for mode SINGLE_CALL_OPDATA_AUTH, opData is required (no fallback to `msg.sender`). For a single call of this
-     * type, the EOA should be making the call to target directly and not through the delegate contract.
-     *
      * 1. For modes with opData authorization (SINGLE_CALL_OPDATA_AUTH and BATCH_CALL_OPDATA_AUTH):
      *   - Calculate authorization digest using EIP-712 typed data signing
-     *   - Validate that the nonce is not already used
      *   - Verify the signature has not expired (current block timestamp <= deadline)
+     *   - Validate that the nonce is not already used
      *   - Verify the caller matches the relayer in the signed authorization
      *   - Verify signature matches the Delegated EOA's
-     * 2. For self-call mode (BATCH_CALL only):
-     *    - Verify caller is the delegated EOA itself (`msg.sender == address(this)`)
+     * 2. For BATCH_CALL, or BATCH_CALL_OPDATA_AUTH when opData is not present:
+     *    - Verify caller is the Delegated EOA itself (`msg.sender == address(this)`)
      *
      * Note: This implementation does NOT perform the target replacement gas optimization listed in EIP-7821.
      * Explicitly, {_call} will NOT replace `address(0)` with `address(this)` as the `target` parameter.
