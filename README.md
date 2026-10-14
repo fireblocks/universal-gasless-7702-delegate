@@ -3,6 +3,9 @@
 A smart contract project leveraging EIP-7702 for universal gasless transaction execution, enabling EOAs to have
 contract-like functionality without requiring gas.
 
+> [!NOTE]
+> This repository is archived to keep the contract source unchanged and available as a reference for integrations.
+
 ## Overview
 
 The Universal Gasless Delegate is a smart contract system that allows EOAs (Externally Owned Accounts) to delegate
