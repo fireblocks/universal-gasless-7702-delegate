@@ -3,9 +3,6 @@
 A smart contract project leveraging EIP-7702 for universal gasless transaction execution, enabling EOAs to have
 contract-like functionality without requiring gas.
 
-> [!NOTE]
-> This repository is archived to keep the contract source unchanged and available as a reference for integrations.
-
 ## Overview
 
 The Universal Gasless Delegate is a smart contract system that allows EOAs (Externally Owned Accounts) to delegate
@@ -68,6 +65,16 @@ universal-gasless-7702-contract/
 - [Forge Std](https://github.com/foundry-rs/forge-std): collection of helpful contracts and utilities for testing
 - [Prettier](https://github.com/prettier/prettier): code formatter for non-Solidity files
 - [Solhint](https://github.com/protofire/solhint): linter for Solidity code
+
+## Deployed Version
+
+Refer to the release tag listed below when verifying or integrating with the deployed contracts.
+
+### [Universal Gasless Delegate](https://github.com/fireblocks/universal-gasless-7702-delegate/blob/v1.0.0/src/UniversalGaslessDelegate.sol)
+
+**Currently Deployed Release:**
+[`v1.0.0`](https://github.com/fireblocks/universal-gasless-7702-delegate/releases/tag/v1.0.0) (commit
+[`b5d1203`](https://github.com/fireblocks/universal-gasless-7702-delegate/commit/b5d12034f52d9ffa87a8152a7162aa3f3cc7ee0b))
 
 ## Getting Started
 
